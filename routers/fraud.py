@@ -79,15 +79,16 @@ def get_fraud_results(analysis_id: int, db: Session = Depends(get_db)):
 def get_fraud_graph(analysis_id: int):
     # Dynamic PyVis generation embedding real Graph Data
     json_path = f"data/fraud_{analysis_id}.json"
-    graph_data = {"nodes": [], "edges": []}
+    graph_data = {"nodes": [], "links": [], "edges": []}
     if os.path.exists(json_path):
         with open(json_path, "r") as f:
             fd = json.load(f)
             circ = next((s for s in fd.get("signals", []) if s.get("signal_type") == "CIRCULAR_TRADING"), {})
-            graph_data = circ.get("graph_data", {"nodes": [], "edges": []})
+            graph_data = circ.get("graph_data", {"nodes": [], "links": [], "edges": []})
             
     nodes_json = json.dumps(graph_data.get("nodes", []))
-    edges_json = json.dumps(graph_data.get("edges", []))
+    links = graph_data.get("links") or graph_data.get("edges") or []
+    edges_json = json.dumps(links)
     
     html_content = f"""
     <html>
@@ -128,9 +129,11 @@ def get_fraud_graph(analysis_id: int):
                 }});
 
                 var formattedEdges = rawEdges.map(function(e) {{
+                    var fromNode = e.from || e.source;
+                    var toNode = e.to || e.target;
                     return {{
-                        from: e.from,
-                        to: e.to,
+                        from: fromNode,
+                        to: toNode,
                         label: e.label,
                         arrows: 'to',
                         font: {{ align: 'horizontal', face: 'Inter', color: '#64748B' }},

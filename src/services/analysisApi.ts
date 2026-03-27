@@ -66,7 +66,7 @@ export function pollAnalysisStatus(
 }
 
 /**
- * Connect to WebSocket ws://localhost:8000/ws/analysis/{analysisId}
+ * Connect to WebSocket using configured WS base URL and analysis id path.
  * The backend pushes JSON messages: { step, progress, status, message }
  * Returns a cleanup function — call on component unmount.
  */

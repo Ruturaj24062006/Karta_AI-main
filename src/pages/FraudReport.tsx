@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, AlertTriangle, CheckCircle2, Maximize2, X, ShieldAlert, Fingerprint, Database } from 'lucide-react';
-import { getFraudResults, getCircularTradingGraphUrl } from '../services/fraudApi';
+import { getFraudResults } from '../services/fraudApi';
 import { useApi, Skeleton, ErrorBanner } from '../services/useApi';
+import FraudGraph from '../components/FraudGraph';
+import BackButton from '../components/BackButton';
 import './FraudReport.css';
 
 function FraudReport() {
@@ -32,7 +34,6 @@ function FraudReport() {
   );
 
   const { gst_detector: gst, circular_trading: ct, mca_xray: mca, overall_verdict: verdict } = data;
-  const graphUrl = getCircularTradingGraphUrl(analysisId);
 
   const isOverallClean = verdict.risk_level === 'LOW' || verdict.risk_level === 'GOOD' || verdict.risk_level === 'CLEAN';
   
@@ -62,16 +63,14 @@ function FraudReport() {
                     Close View <X size={20} />
                 </button>
             </div>
-            <iframe
-                src={graphUrl}
-                title="Full Screen Network"
-                style={{ flex: 1, width: '100%', border: 'none', backgroundColor: '#F8FAFC' }}
-                sandbox="allow-scripts allow-same-origin"
-            />
+              <div style={{ flex: 1, width: '100%', padding: 12, background: '#F8FAFC' }}>
+                <FraudGraph graphData={ct.graph_data} height={window.innerHeight - 120} />
+              </div>
           </div>
       )}
 
       <nav className="fraud-navbar">
+        <BackButton fallbackTo={`/dashboard?id=${analysisId}`} label="Back" />
         <Link to={`/dashboard?id=${analysisId}`} className="fraud-back-btn">
           <ArrowLeft size={18} /> <span>Portfolio Dashboard</span>
         </Link>
@@ -177,14 +176,7 @@ function FraudReport() {
             </button>
           </div>
           
-          <div style={{ position: 'relative', height: 400, borderRadius: 20, overflow: 'hidden', border: '1px solid #E2E8F0' }}>
-            <iframe
-                src={graphUrl}
-                title="Circular Trading Network"
-                style={{ width: '100%', height: '100%', border: 'none' }}
-                sandbox="allow-scripts allow-same-origin"
-            />
-          </div>
+          <FraudGraph graphData={ct.graph_data} height={400} />
         </div>
 
         {/* MCA X-RAY */}

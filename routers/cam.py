@@ -35,6 +35,7 @@ async def pump_ws_progress(analysis_id: int):
     except asyncio.CancelledError:
         pass
 
+@router.post("/generate-cam/{analysis_id}")
 @router.post("/api/cam/generate/{analysis_id}")
 async def generate_cam_document(analysis_id: int, body: CAMRequest = CAMRequest(), db: Session = Depends(get_db)):
     field_observations = (body.field_observations or "").strip()

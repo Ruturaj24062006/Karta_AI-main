@@ -1,11 +1,12 @@
 /**
  * KARTA API Config — Central Axios instance
  * All API calls go through this file.
- * Base URL reads from env VITE_API_URL, defaults to localhost:8000
+ * Base URL reads from env VITE_API_URL.
  */
 import axios from 'axios';
 
-export const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`;
+export const WS_API_URL = BASE_URL.replace(/^http/i, 'ws');
 
 // WebSocket goes through the Vite proxy (same origin = port 5173 in dev)
 // so browsers don't block the cross-port WS upgrade handshake.
@@ -45,7 +46,7 @@ api.interceptors.response.use(
 
     // Enrich error so UI components can read .userMessage directly
     error.userMessage =
-      status === 0       ? 'Cannot reach KARTA backend. Make sure the server is running on :8000.' :
+      status === 0       ? `Cannot reach KARTA backend at ${BASE_URL}.` :
       status === 400     ? `Bad request: ${detail}` :
       status === 404     ? `Not found: ${detail}` :
       status === 422     ? `Validation error: ${detail}` :

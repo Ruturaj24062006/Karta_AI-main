@@ -4,7 +4,9 @@ import {
   CheckCircle, Bell, AlertTriangle, Smartphone,
   TrendingUp, ShieldCheck, Activity, WifiOff, RefreshCw,
 } from 'lucide-react';
+import { WS_API_URL } from '../services/apiConfig';
 import { acknowledgeAlert } from '../services/ewsApi';
+import BackButton from '../components/BackButton';
 import './WarningSystem.css';
 
 /* ── helpers ──────────────────────────────────────────── */
@@ -101,7 +103,7 @@ function WarningSystem() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/^http/, 'ws');
+  const WS_BASE = WS_API_URL;
 
   const connect = useCallback(() => {
     if (reconnTimer.current) clearTimeout(reconnTimer.current);
@@ -162,7 +164,7 @@ function WarningSystem() {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', gap: 20 }}>
       <div style={{ width: 52, height: 52, border: '4px solid #E2E8F0', borderTopColor: '#6366F1', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
       <div style={{ fontWeight: 700, color: '#475569', fontSize: '1.1rem' }}>Connecting to EWS Live Feed…</div>
-      <div style={{ fontSize: '0.82rem', color: '#94A3B8' }}>ws://localhost:8000/ws/ews/{companyId}</div>
+      <div style={{ fontSize: '0.82rem', color: '#94A3B8' }}>{`${WS_BASE}/ws/ews/${companyId}`}</div>
     </div>
   );
 
@@ -179,6 +181,7 @@ function WarningSystem() {
 
       {/* ── Navbar ─────────────────────────────────────── */}
       <nav className="warning-navbar">
+        <BackButton fallbackTo={`/dashboard?id=${analysisId}`} label="Back" />
         <Link to="/" className="warning-logo">
           <div style={{ background: '#0F172A', color: 'white', padding: 6, borderRadius: 8, display: 'flex' }}>
             <ShieldCheck size={22} strokeWidth={2.5} />

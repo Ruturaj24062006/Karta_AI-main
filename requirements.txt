@@ -6,6 +6,7 @@ requests
 python-multipart
 python-dotenv
 boto3
+anthropic
 cohere
 tenacity
 pdfplumber
@@ -13,6 +14,7 @@ python-docx
 PyMuPDF
 opencv-python
 pytesseract
+paddleocr
 langdetect
 deep-translator
 word2number

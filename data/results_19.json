@@ -1,0 +1,55 @@
+{
+  "shap": {
+    "shap_chart_url": "/api/shap-chart/19",
+    "shap_factors": [
+      {
+        "name": "Current Ratio",
+        "impact": "-6.4"
+      },
+      {
+        "name": "Emi Bounce Count 12M",
+        "impact": "-5.8"
+      },
+      {
+        "name": "Gst Mismatch Percent",
+        "impact": "+0.5"
+      },
+      {
+        "name": "News Risk Score",
+        "impact": "-4.2"
+      },
+      {
+        "name": "Debt To Equity",
+        "impact": "-2.1"
+      },
+      {
+        "name": "Data Quality Score",
+        "impact": "-1.0"
+      }
+    ],
+    "base_risk": 16.0,
+    "final_pd": 7.8
+  },
+  "news_signals": [
+    {
+      "signal": "Positive earnings outlook and stable order inflows observed.",
+      "source": "FinBERT Layer",
+      "date": "2026-03-27",
+      "risk": "LOW",
+      "exact_quote": "Positive earnings outlook and stable order inflows observed."
+    },
+    {
+      "signal": "No adverse litigation or default-related coverage in the last quarter.",
+      "source": "FinBERT Layer",
+      "date": "2026-03-27",
+      "risk": "LOW",
+      "exact_quote": "No adverse litigation or default-related coverage in the last quarter."
+    }
+  ],
+  "recommendation": {
+    "decision_reasoning": "Mock Approved profile: strong liquidity (Current Ratio 2.5), zero EMI bounces in 12 months, low GST mismatch (0.5%), and positive FinBERT sentiment.",
+    "conditions": [],
+    "loan_tenure": 5,
+    "interest_rate_breakdown": "6.5% Base Rate + 1.5% Risk Premium"
+  }
+}

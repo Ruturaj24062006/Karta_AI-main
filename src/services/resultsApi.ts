@@ -17,10 +17,15 @@ export interface FullResults {
   };
   decision: {
     decision: string;
+    loan_recommendation?: string;
     recommended_loan_amount: number;
     recommended_interest_rate: number;
     probability_of_default: number;
     data_quality_score: number;
+    emi_bounce_count_12m?: number;
+    emi_bounce_reject?: boolean;
+    od_utilization_rate_percent?: number | null;
+    liquidity_red_flag?: boolean;
   };
   fraud: {
     overall_fraud_risk: string;

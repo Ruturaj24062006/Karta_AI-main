@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Clock, Zap, FileText, Activity, ShieldAlert, ArrowRight, Home } from 'lucide-react';
+import { Clock, Zap, FileText, Activity, ShieldAlert, ArrowRight } from 'lucide-react';
 import './History.css';
 import api from '../services/apiConfig';
+import BackButton from '../components/BackButton';
 
 function History() {
     const [history, setHistory] = useState<any[]>([]);
@@ -38,6 +39,7 @@ function History() {
     return (
         <div className="history-page">
             <nav className="history-navbar">
+                <BackButton fallbackTo="/" label="Back" />
                 <Link to="/" className="logo-container">
                     <Zap size={24} fill="#1C335B" stroke="none" />
                     <span>KARTA AI</span>

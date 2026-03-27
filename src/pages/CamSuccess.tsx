@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   FileText, Loader2, Download, CheckCircle, Plus, Bell,
   ClipboardList, MapPin, Building2, Users, Eye, ChevronRight,
   AlertTriangle, ShieldCheck, Banknote,
 } from 'lucide-react';
+import { WS_API_URL } from '../services/apiConfig';
 import { getCAMPreview, generateCAM, downloadCAM } from '../services/camApi';
 import { useApi, Skeleton, ErrorBanner } from '../services/useApi';
+import BackButton from '../components/BackButton';
 import './CamSuccess.css';
 
 /* ── Observation fields the analyst must fill before generating ──────── */
@@ -94,7 +96,7 @@ function CamSuccess() {
   const [observations, setObservations] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [camMeta, setCamMeta] = useState<any>(null);
-  const [generating, setGenerating] = useState(false);
+  const [, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
   const [genProgress, setGenProgress] = useState(0);
   const [genDetail, setGenDetail] = useState('');
@@ -130,7 +132,7 @@ function CamSuccess() {
     setGenDetail('Connecting to Cohere AI engine...');
 
     /* WS progress */
-    const ws = new WebSocket(`ws://localhost:8000/ws/analysis/${analysisId}`);
+    const ws = new WebSocket(`${WS_API_URL}/ws/analysis/${analysisId}`);
     wsRef.current = ws;
     ws.onmessage = (e) => {
       try {
@@ -185,6 +187,7 @@ function CamSuccess() {
 
       {/* Navbar */}
       <nav className="cam-navbar">
+        <BackButton fallbackTo={`/dashboard?id=${analysisId}`} label="Back" />
         <Link to="/" className="cam-logo">
           <div style={{ background: '#1C335B', color: 'white', padding: '6px 8px', borderRadius: 8, marginRight: 8 }}>
             <FileText size={18} strokeWidth={2.5} />

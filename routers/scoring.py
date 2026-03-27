@@ -10,6 +10,7 @@ from models.fraud import FraudSignal
 router = APIRouter()
 
 @router.get("/api/results/{analysis_id}")
+@router.get("/results/{analysis_id}")
 def get_analysis_results(analysis_id: int, db: Session = Depends(get_db)):
     analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
     if not analysis:
@@ -58,7 +59,8 @@ def get_analysis_results(analysis_id: int, db: Session = Depends(get_db)):
             "recommended_loan_amount": analysis.recommended_loan_amount,
             "recommended_interest_rate": analysis.recommended_interest_rate,
             "probability_of_default": analysis.probability_of_default,
-            "data_quality_score": analysis.data_quality_score
+            "data_quality_score": analysis.data_quality_score,
+            "decision_trace": dashboard_data.get("decision_trace", {})
         },
         "fraud": {
             "overall_fraud_risk": analysis.fraud_risk_level,

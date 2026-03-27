@@ -42,6 +42,38 @@ async def run_analysis_background(analysis_id: int):
         db.close()
         return
 
+    def _extract_dins_from_ocr(ocr_payload: dict) -> list[str]:
+        if not isinstance(ocr_payload, dict):
+            return []
+        raw_dins = ocr_payload.get("director_dins") or ocr_payload.get("dins") or []
+        return [str(d).strip() for d in raw_dins if str(d).strip()]
+
+    def _extract_fraud_context(fraud_payload: dict) -> dict:
+        ctx = {
+            "gst_mismatch_ratio": 0.0,
+            "active_npa_notice": False,
+            "systemic_fraud_detected": False,
+        }
+        for sig in (fraud_payload or {}).get("signals", []) or []:
+            signal_type = str(sig.get("signal_type", "")).upper()
+            risk_level = str(sig.get("risk_level", "")).upper()
+            desc = str(sig.get("description", "")).lower()
+            raw = sig.get("raw_data") or {}
+
+            if signal_type == "GST_MISMATCH":
+                try:
+                    ctx["gst_mismatch_ratio"] = float(raw.get("mismatch_percentage", 0.0) or 0.0)
+                except Exception:
+                    pass
+
+            if "npa" in desc or "default" in desc or "wilful defaulter" in desc:
+                ctx["active_npa_notice"] = True
+
+            if (signal_type in ["CIRCULAR_TRADING", "GST_MISMATCH"] and risk_level == "HIGH") or "systemic fraud" in desc:
+                ctx["systemic_fraud_detected"] = True
+
+        return ctx
+
     try:
         # Step 1: Upload Complete
         analysis.analysis_status = "processing"
@@ -59,6 +91,20 @@ async def run_analysis_background(analysis_id: int):
         ocr_res = await asyncio.to_thread(ocr_service.extract_financial_data, file_paths, str(analysis_id), loop)
         if "error" in ocr_res:
              raise Exception(f"OCR Extraction Source Failed: {ocr_res['error']}")
+        if ocr_res.get("error_detected") and float(ocr_res.get("data_quality_score", 0.0) or 0.0) <= 0:
+            analysis.analysis_status = "failed"
+            analysis.failure_reason = ocr_res.get("error_message", "OCR quality too low. Please re-upload clearer files.")
+            analysis.progress = 100.0
+            db.commit()
+            await ws_push(
+                analysis_id,
+                -1,
+                "OCR Validation Failed",
+                f"{analysis.failure_reason} (status=INSUFFICIENT_DATA)",
+                100,
+                "failed"
+            )
+            return
              
         analysis.data_quality_score = ocr_res.get("data_quality_score", 0.0)
         analysis.progress = 30.0
@@ -73,7 +119,7 @@ async def run_analysis_background(analysis_id: int):
             fraud_service.run_fraud_detection, 
             company.gstin_number, 
             company.cin_number,
-            dins=["02930211", "07882291"], # Hackathon placeholder DINS for scanning checks
+            dins=_extract_dins_from_ocr(ocr_res),
             gst_data=ocr_res.get("gst_records"), 
             trx_data=ocr_res.get("transaction_ledgers"),
             ocr_revenue=ocr_res.get("revenue_fy24", company.loan_amount_requested * 2.0)
@@ -81,6 +127,10 @@ async def run_analysis_background(analysis_id: int):
         
         if "error" in fraud_res:
              raise Exception(f"Fraud Detection Engine Failed: {fraud_res['error']}")
+
+        fraud_ctx = _extract_fraud_context(fraud_res)
+        if isinstance(ocr_res, dict):
+            ocr_res.update(fraud_ctx)
              
         analysis.fraud_risk_level = fraud_res.get("fraud_risk_level", "LOW")
         signals = fraud_res.get("signals", [])
@@ -123,10 +173,25 @@ async def run_analysis_background(analysis_id: int):
             ocr_res,
             analysis.fraud_risk_level or "LOW",
             analysis.news_risk_score or 0.0,
-            company.loan_amount_requested or 0.0
+            company.loan_amount_requested or 0.0,
+            fraud_res.get("confirmed_high_signals", 0)
         )
         if "error" in score_res:
              raise Exception(f"XGBoost Scoring Model Failed: {score_res['error']}")
+        if score_res.get("status") == "INSUFFICIENT_DATA":
+            analysis.analysis_status = "failed"
+            analysis.failure_reason = score_res.get("decision_reasoning", "Insufficient data for underwriting decision.")
+            analysis.progress = 100.0
+            db.commit()
+            await ws_push(
+                analysis_id,
+                -1,
+                "Scoring Validation Failed",
+                f"{analysis.failure_reason} (status=INSUFFICIENT_DATA)",
+                100,
+                "failed"
+            )
+            return
              
         analysis.probability_of_default = score_res.get("probability_of_default", 0.0)
         analysis.recommended_interest_rate = score_res.get("recommended_interest_rate", 0.0)
@@ -200,7 +265,8 @@ async def run_analysis_background(analysis_id: int):
                 "conditions": actual_conditions,
                 "loan_tenure": 3,
                 "interest_rate_breakdown": f"{6.5}% Base Rate + {analysis.recommended_interest_rate - 6.5:.1f}% Risk Premium"
-            }
+            },
+            "decision_trace": score_res.get("decision_trace", {})
         }
         with open(f"data/results_{analysis.id}.json", "w") as f:
             json.dump(dashboard_results, f)

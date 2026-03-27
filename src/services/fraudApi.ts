@@ -27,8 +27,9 @@ export interface CircularTrading {
   total_amount_rotated: number;
   entities: CircularEntity[];
   graph_data: {
-    nodes: { id: number; label: string; color: string }[];
-    edges: { from: number; to: number; label: string }[];
+    nodes: { id: string; label: string; color: string }[];
+    links?: { source: string; target: string; label?: string; value?: number }[];
+    edges?: { source: string; target: string; label?: string; value?: number }[];
   };
 }
 

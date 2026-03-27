@@ -4,6 +4,7 @@ import { Plus, AlertTriangle, Activity, Network, CalendarMinus, AlertCircle, Fil
 import { getFullResults, getSHAPChartUrl } from '../services/resultsApi';
 import { downloadCAM } from '../services/camApi';
 import { useApi, Skeleton, ErrorBanner } from '../services/useApi';
+import BackButton from '../components/BackButton';
 import './Dashboard.css';
 
 function colorByRisk(r: string) {
@@ -68,6 +69,7 @@ function Dashboard() {
   return (
     <div className="dashboard-page">
       <nav className="navbar">
+        <BackButton fallbackTo="/history" label="Back" />
         <Link to="/" className="logo-container">
           <div className="logo-icon">▽</div>
           <span style={{ color: '#1C335B' }}>KARTA AI</span>

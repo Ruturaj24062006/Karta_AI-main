@@ -7,10 +7,13 @@ import { BASE_URL } from './apiConfig';
 
 export interface UploadResult {
   success: boolean;
+  task_id?: string;
   company_id: number;
   analysis_id: number;
   message: string;
+  ws_channel?: string;
   uploaded_files: { name: string; size_mb: number }[];
+  ocr_result?: unknown;
 }
 
 export interface UploadParams {
@@ -26,7 +29,7 @@ export interface UploadParams {
 }
 
 /**
- * Upload company + documents to POST /api/upload
+ * Upload company + documents to POST /upload
  * Returns company_id and analysis_id to pass to subsequent pages.
  */
 export async function uploadCompanyDocuments(params: UploadParams): Promise<UploadResult> {
@@ -40,7 +43,7 @@ export async function uploadCompanyDocuments(params: UploadParams): Promise<Uplo
   form.append('bank_statement',params.bank_statement);
   form.append('gst_filing',    params.gst_filing);
 
-  const response = await axios.post<UploadResult>(`${BASE_URL}/api/upload`, form, {
+  const response = await axios.post<UploadResult>(`${BASE_URL}/upload`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120_000,
     onUploadProgress: (evt) => {

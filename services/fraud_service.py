@@ -67,7 +67,7 @@ def analyze_gst_mismatches(gstin: str, uploaded_gst_data: List[Dict[str, float]]
         mismatch_percentage = (mismatch_amount / total_3b_amount) * 100
 
     # User defined strict risk thresholds
-    if mismatch_percentage > 30.0:
+    if mismatch_percentage > 20.0:
         risk_level = "HIGH"
     elif mismatch_percentage > 15.0:
         risk_level = "MEDIUM"

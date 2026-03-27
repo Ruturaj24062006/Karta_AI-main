@@ -1,10 +1,22 @@
 import { useState } from 'react';
 import { Triangle, CloudUpload, FileUp, FileText, CheckCircle2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { getAnalysisStatus, triggerAnalysis } from '../services/analysisApi';
 import { uploadCompanyDocuments } from '../services/uploadApi';
-import { triggerAnalysis } from '../services/analysisApi';
 import { ErrorBanner } from '../services/useApi';
+import BackButton from '../components/BackButton';
 import './NewAnalysis.css';
+
+type UploadResponse = {
+  success: boolean;
+  task_id?: string;
+  company_id: number;
+  analysis_id: number;
+  message?: string;
+  ws_channel?: string;
+  uploaded_files?: Array<{ name: string; size_mb: number }>;
+  ocr_result?: unknown;
+};
 
 function NewAnalysis() {
   const navigate = useNavigate();
@@ -13,12 +25,69 @@ function NewAnalysis() {
   const [uploadPct, setUploadPct] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [statusText, setStatusText] = useState('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: keyof typeof files) => {
     if (e.target.files?.[0]) setFiles({ ...files, [type]: e.target.files[0] });
+  };
+
+  const handleUpload = async (): Promise<UploadResponse> => {
+    if (!files.balanceSheet || !files.bankStatements || !files.gstFilings) {
+      throw new Error('Please upload all required documents.');
+    }
+
+    const payload = await uploadCompanyDocuments({
+      company_name: formData.companyName,
+      cin_number: formData.cin,
+      gstin_number: formData.gstin,
+      pan_number: formData.pan,
+      loan_amount: formData.amount,
+      balance_sheet: files.balanceSheet,
+      bank_statement: files.bankStatements,
+      gst_filing: files.gstFilings,
+      onProgress: (pct) => {
+        setUploadPct(pct);
+        setStatusText(`Uploading documents... ${pct}%`);
+      },
+    });
+    console.log('[UPLOAD] Backend response:', payload);
+
+    if (!payload?.success || !payload?.analysis_id) {
+      throw new Error(payload?.message || 'Upload succeeded but analysis id missing in response.');
+    }
+
+    // Optional logging for OCR payload if backend includes Smart OCR output.
+    if (payload.ocr_result) {
+      console.log('[SMART OCR PIPELINE] PaddleOCR result:', payload.ocr_result);
+    }
+
+    return payload;
+  };
+
+  const waitForBackendStatus = async (analysisId: number): Promise<void> => {
+    const maxAttempts = 25;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        const status = await getAnalysisStatus(analysisId);
+        const backendPct = Math.max(0, Math.min(100, Math.round(status.percentage_complete || 0)));
+        setUploadPct((prev) => Math.max(prev, backendPct));
+        setStatusText(`Backend status: ${status.status} (${backendPct}%)`);
+
+        if (status.status === 'processing' || status.status === 'completed') {
+          return;
+        }
+        if (status.status === 'failed') {
+          throw new Error(status.failure_reason || 'Backend processing failed.');
+        }
+      } catch (err) {
+        if (attempt === maxAttempts - 1) throw err;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,22 +103,15 @@ function NewAnalysis() {
 
     setIsSubmitting(true);
     setUploadPct(0);
+    setStatusText('Preparing upload...');
     try {
-      // STEP 1: Upload files with real byte progress
-      const result = await uploadCompanyDocuments({
-        company_name:  formData.companyName,
-        cin_number:    formData.cin,
-        gstin_number:  formData.gstin,
-        pan_number:    formData.pan,
-        loan_amount:   formData.amount,
-        balance_sheet: files.balanceSheet,
-        bank_statement: files.bankStatements,
-        gst_filing:    files.gstFilings,
-        onProgress:    setUploadPct,
-      });
+      // STEP 1: Upload files with real byte progress and server response handling.
+      const result = await handleUpload();
 
-      // STEP 2: Trigger analysis (fire-and-forget, backend processes async)
-      triggerAnalysis(result.analysis_id).catch(console.error);
+      // STEP 2: Trigger analysis pipeline and listen to backend status endpoint.
+      setStatusText('Triggering backend analysis...');
+      await triggerAnalysis(result.analysis_id);
+      await waitForBackendStatus(result.analysis_id);
 
       // STEP 3: Go to the analysis loading screen
       navigate(`/analysis?id=${result.analysis_id}`);
@@ -63,6 +125,7 @@ function NewAnalysis() {
   return (
     <div className="analysis-page">
       <nav className="navbar">
+        <BackButton fallbackTo="/" label="Back" />
         <div className="logo" style={{ color: '#1C335B' }}>
           <Triangle size={24} fill="#1C335B" stroke="none" style={{ transform: 'rotate(180deg)' }} />
           KARTA
@@ -122,7 +185,7 @@ function NewAnalysis() {
                   return (
                     <label key={key} className={`upload-card ${uploaded ? 'uploaded' : ''}`}
                       style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                      <input type="file" accept=".pdf" style={{ display: 'none' }}
+                      <input type="file" accept=".pdf,image/*" style={{ display: 'none' }}
                         onChange={(e) => handleFileChange(e, key)} />
                       <div className="upload-icon">
                         <Icon size={24} color={uploaded ? '#16a34a' : '#1C335B'} />
@@ -159,7 +222,7 @@ function NewAnalysis() {
               )}
               <span style={{ position: 'relative', zIndex: 1 }}>
                 {isSubmitting
-                  ? uploadPct < 100 ? `⬆️ Uploading... ${uploadPct}%` : '⚙️ Initialising KARTA Analysis...'
+                  ? uploadPct < 100 ? statusText || `Uploading... ${uploadPct}%` : 'Initialising KARTA Analysis...'
                   : '🚀 Run KARTA Analysis'}
               </span>
             </button>

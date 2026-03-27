@@ -56,22 +56,23 @@ function Home() {
           </div>
 
           <div className="hero-illustration">
-            <div className="mockup-window">
-              <div className="mockup-header">
-                <div className="mockup-line" style={{ width: '40%' }}></div>
-                <div className="mockup-circle"></div>
+            <div className="hero-insight-grid">
+              <div className="hero-insight-card">
+                <div className="hero-insight-label">FRAUD DETECTION</div>
+                <div className="hero-insight-value">94%+</div>
+                <p>Detect suspicious transaction loops, GST anomalies, and compliance red flags.</p>
               </div>
-              <div className="mockup-body">
-                <div className="mockup-line" style={{ width: '100%' }}></div>
-                <div className="mockup-line" style={{ width: '80%' }}></div>
-                <div className="mockup-input">
-                  <div className="mockup-input-inner"></div>
-                </div>
+
+              <div className="hero-insight-card hero-insight-card-primary">
+                <div className="hero-insight-label">CAM TURNAROUND</div>
+                <div className="hero-insight-value">2 Hours</div>
+                <p>From document upload to decision memo generation with full rationale trace.</p>
               </div>
-              <div className="mockup-cards">
-                <div className="mockup-card"></div>
-                <div className="mockup-card"></div>
-                <div className="mockup-card"></div>
+
+              <div className="hero-insight-card">
+                <div className="hero-insight-label">MODEL EXPLAINABILITY</div>
+                <div className="hero-insight-value">SHAP + XGBoost</div>
+                <p>Every approval and rejection includes transparent, auditable risk drivers.</p>
               </div>
             </div>
           </div>

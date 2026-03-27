@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -12,9 +13,18 @@ from models.analysis import Analysis
 from models.company import Company
 from models.fraud import FraudSignal
 from services import cam_service
+from services.cam_report_service import generate_cam_report
 from routers.ws import manager
 
 router = APIRouter()
+
+
+def _remove_temp_file(path: str):
+    try:
+        if path and os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
 
 class CAMRequest(BaseModel):
     field_observations: Optional[str] = ""
@@ -215,3 +225,44 @@ def preview_cam(analysis_id: int, db: Session = Depends(get_db)):
         "fraud_summary": f"Integrity check returned risk level {fraud_val}. Specific evidence found in {len(fraud_data.get('signals', [])) if isinstance(fraud_data, dict) else 0} signals.",
         "credit_score_summary": f"XGBoost Model evaluated final PD at {pd_val:.1f}%. Top factor: {shap.get('shap_factors', ['None'])[0] if isinstance(shap, dict) and shap.get('shap_factors') else 'N/A'}."
     }
+
+
+@router.get("/reports/download/{task_id}")
+@router.get("/api/reports/download/{task_id}")
+def download_generated_report(task_id: int, db: Session = Depends(get_db)):
+    analysis = db.query(Analysis).filter(Analysis.id == task_id).first()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    company = db.query(Company).filter(Company.id == analysis.company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    fraud_data = {}
+    results_data = {}
+
+    fraud_file = f"data/fraud_{analysis.id}.json"
+    if os.path.exists(fraud_file):
+        with open(fraud_file, "r") as f:
+            fraud_data = json.load(f)
+
+    results_file = f"data/results_{analysis.id}.json"
+    if os.path.exists(results_file):
+        with open(results_file, "r") as f:
+            results_data = json.load(f)
+
+    pdf_path = generate_cam_report(
+        company_name=company.company_name,
+        final_decision=analysis.decision or "REJECT",
+        analysis_pd=analysis.probability_of_default or 45.1,
+        results_data=results_data,
+        fraud_data=fraud_data,
+    )
+
+    return FileResponse(
+        path=pdf_path,
+        media_type="application/pdf",
+        filename="KARTA_CAM_Report.pdf",
+        headers={"Content-Disposition": "attachment; filename=KARTA_CAM_Report.pdf"},
+        background=BackgroundTask(_remove_temp_file, pdf_path),
+    )

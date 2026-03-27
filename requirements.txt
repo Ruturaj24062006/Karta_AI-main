@@ -12,6 +12,7 @@ tenacity
 pdfplumber
 python-docx
 PyMuPDF
+reportlab
 opencv-python
 pytesseract
 paddleocr

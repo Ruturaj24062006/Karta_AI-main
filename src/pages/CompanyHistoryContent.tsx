@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchCompanyHistory, type CompanyHistoryItem } from '../services/companyHistoryApi';
+import { fetchCompanyHistory, type CompanyHistoryItem } from '../services/companyHistoryApi.ts';
 
 function CompanyHistoryContent() {
   const [history, setHistory] = useState<CompanyHistoryItem[]>([]);

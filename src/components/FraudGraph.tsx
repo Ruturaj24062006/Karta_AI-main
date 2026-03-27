@@ -9,6 +9,8 @@ type GraphNode = {
 type GraphLink = {
   source: string;
   target: string;
+  from?: string;
+  to?: string;
   label?: string;
   value?: number;
 };
@@ -72,8 +74,12 @@ export default function FraudGraph({ graphData, height = 380 }: Props) {
 
   const links = rawLinks
     .map((l) => {
-      const source = indexByNodeId.get(String(l.source));
-      const target = indexByNodeId.get(String(l.target));
+      const srcId = l.source ?? l.from;
+      const tgtId = l.target ?? l.to;
+      if (!srcId || !tgtId) return null;
+
+      const source = indexByNodeId.get(String(srcId));
+      const target = indexByNodeId.get(String(tgtId));
       if (source === undefined || target === undefined) return null;
 
       return {

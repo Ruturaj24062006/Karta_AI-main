@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Plus, AlertTriangle, Activity, Network, CalendarMinus, AlertCircle, FileText, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { getFullResults, getSHAPChartUrl } from '../services/resultsApi';
-import { downloadCAM } from '../services/camApi';
+import { downloadCAMReport } from '../services/camApi';
 import { useApi, Skeleton, ErrorBanner } from '../services/useApi';
 import BackButton from '../components/BackButton';
 import './Dashboard.css';
@@ -20,6 +20,7 @@ function Dashboard() {
   const analysisId = Number(searchParams.get('id') || '1');
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [downloadingReport, setDownloadingReport] = useState(false);
 
   const { data, loading, error, refetch } = useApi(() => getFullResults(analysisId), [analysisId]);
 
@@ -65,6 +66,15 @@ function Dashboard() {
   ].sort((a, b) => b.sortVal - a.sortVal);
 
   const shapUrl = getSHAPChartUrl(analysisId);
+
+  const handleDownloadReport = async () => {
+    setDownloadingReport(true);
+    try {
+      await downloadCAMReport(analysisId);
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
 
   return (
     <div className="dashboard-page">
@@ -248,8 +258,13 @@ function Dashboard() {
           <Link to={`/warning-system?company_id=${data.company.cin_number ? '1' : '1'}&id=${analysisId}`} className="btn-action" style={{ textDecoration: 'none', background: '#1C335B', color: 'white', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 8 }}>
             <AlertTriangle size={20} /> EWS Monitor
           </Link>
-          <button onClick={() => downloadCAM(analysisId, 'pdf')} className="btn-action btn-download" style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-            <FileText size={20} /> Download CAM Report
+          <button
+            onClick={handleDownloadReport}
+            disabled={downloadingReport}
+            className="btn-action btn-download"
+            style={{ border: 'none', cursor: downloadingReport ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: downloadingReport ? 0.75 : 1 }}
+          >
+            {downloadingReport ? <Loader2 size={20} className="spinner" /> : <FileText size={20} />} {downloadingReport ? 'Generating Report...' : 'Download CAM Report'}
           </button>
         </div>
       </div>

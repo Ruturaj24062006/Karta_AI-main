@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import AdminDashboardLayout, { type AdminView } from '../components/AdminDashboardLayout';
 import AdminPageHeader from '../components/AdminPageHeader';
-import AdminDashboardContent from './AdminDashboardContent';
-import UserManagementContent from './UserManagementContent';
-import CompanyHistoryContent from './CompanyHistoryContent';
+import AdminDashboardContent from './AdminDashboardContent.tsx';
+import UserManagementContent from './UserManagementContent.tsx';
+import CompanyHistoryContent from './CompanyHistoryContent.tsx';
 
 function AdminPanel() {
   const [currentView, setCurrentView] = useState<AdminView>('dashboard');

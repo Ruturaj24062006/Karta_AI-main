@@ -55,3 +55,20 @@ export function downloadCAM(analysisId: number, format: 'word' | 'pdf'): void {
   a.click();
   document.body.removeChild(a);
 }
+
+export async function downloadCAMReport(taskId: number): Promise<void> {
+  const res = await api.get(`/reports/download/${taskId}`, {
+    responseType: 'blob',
+    timeout: 120_000,
+  });
+
+  const blob = new Blob([res.data], { type: 'application/pdf' });
+  const tempUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = tempUrl;
+  a.download = 'KARTA_CAM_Report.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(tempUrl);
+}

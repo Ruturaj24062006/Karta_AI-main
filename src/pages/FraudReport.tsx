@@ -187,7 +187,9 @@ function FraudReport() {
                 {isBharatPrecisionCase ? (
                   <span className="tag-fraud" style={{ background: '#FEF3C7', color: '#92400E' }}>RECONCILIATION REQUIRED</span>
                 ) : (
-                  <span className="tag-fraud">FRAUD ALERT</span>
+                  <span className="tag-fraud">
+                    {String(displayGst.risk_level || '').toUpperCase() === 'CRITICAL' ? 'CRITICAL FRAUD ALERT' : 'FRAUD ALERT'}
+                  </span>
                 )}
                 </div>
               <div style={{ background: isBharatPrecisionCase ? '#FFFBEB' : '#FFF1F2', border: `1px dashed ${isBharatPrecisionCase ? '#F59E0B' : '#FDA4AF'}`, padding: '1rem', borderRadius: 12, display: 'flex', gap: 12 }}>

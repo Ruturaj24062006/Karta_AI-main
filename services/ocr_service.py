@@ -337,6 +337,8 @@ def find_financial_indicators(text: str) -> Dict[str, Any]:
         "total_assets": ["total assets", "assets total"],
         "total_liabilities": ["total liabilities", "liabilities total"],
         "total_equity": ["total equity", "net worth", "shareholders funds", "equity share capital"],
+        "reserves_surplus": ["reserves and surplus", "reserves & surplus", "retained earnings", "free reserves"],
+        "total_shareholders_funds": ["total shareholders funds", "shareholders' funds", "shareholder funds", "net worth"],
         "total_debt": ["total debt", "total borrowings", "long term borrowings"],
         "current_assets": ["current assets", "total current assets"],
         "current_liabilities": ["current liabilities", "total current liabilities"],
@@ -515,6 +517,9 @@ def extract_financial_data(file_paths: list[str], analysis_id: str = None, loop=
         data_quality_score = 100.0 - ((12 - len(found_indicators)) * 8.33)
         if avg_conf < 30.0:
             data_quality_score = min(data_quality_score, 35.0)
+        if stress_signals.get("stressed_document") or stress_signals.get("manual_annotation_detected"):
+            # Force realistic low confidence for stressed/annotated scans.
+            data_quality_score = min(data_quality_score, 12.0)
         data_quality_score = round(max(8.0, min(100.0, data_quality_score)), 1)
         
         send_ws_progress(analysis_id, loop, 95, f"Extracted {len(found_indicators)} values with average confidence {avg_conf:.0f}%")

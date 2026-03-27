@@ -70,8 +70,8 @@ def get_fraud_results(analysis_id: int, db: Session = Depends(get_db)):
         },
         "overall_verdict": {
             "risk_level": fraud_data.get("fraud_risk_level", "LOW"),
-            "signals_count": len([s for s in signals_list if s.get("risk_level") in ["MEDIUM", "HIGH"]]),
-            "recommendation": "Multiple patterns detected." if fraud_data.get("fraud_risk_level") == "HIGH" else "All three analytics layers show clean baseline profiles. Safe to proceed."
+            "signals_count": len([s for s in signals_list if str(s.get("risk_level", "")).upper() in ["MEDIUM", "HIGH", "CRITICAL"]]),
+            "recommendation": "Multiple patterns detected." if str(fraud_data.get("fraud_risk_level", "")).upper() in ["HIGH", "CRITICAL"] else "All three analytics layers show clean baseline profiles. Safe to proceed."
         }
     }
 

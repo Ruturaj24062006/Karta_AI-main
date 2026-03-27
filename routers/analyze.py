@@ -6,13 +6,14 @@ from database import get_db, SessionLocal
 from models.analysis import Analysis
 from models.company import Company
 from models.fraud import FraudSignal
+from models.ews import EWSSignal
+from services.news_intelligence_service import get_company_news_intelligence
 
 from routers.ws import manager
 
 from services import (
     ocr_service,
     fraud_service,
-    rag_service,
     scoring_service,
     cam_service
 )
@@ -195,14 +196,25 @@ async def run_analysis_background(analysis_id: int):
 
         # Step 4: News
         await ws_push(analysis_id, 4, "News Intelligence Agent", "Scanning last 30 days of market news", 60, "running")
-        news_res = await asyncio.to_thread(rag_service.get_news_intelligence, company.company_name, company.gstin_number)
-        if "error" in news_res:
-             raise Exception(f"News RAG Search Failed: {news_res['error']}")
-             
-        analysis.news_risk_score = news_res.get("news_risk_score", 0.0)
+        news_res = await asyncio.to_thread(get_company_news_intelligence, company.company_name)
+
+        analysis.news_risk_score = float(news_res.get("external_risk_score", 0.0) or 0.0)
+
+        if news_res.get("critical_negative_event"):
+            db.add(EWSSignal(
+                company_id=company.id,
+                signal_name="Pre-Default Risk Alert",
+                signal_score=min(100.0, analysis.news_risk_score + 15.0),
+                risk_level="CRITICAL",
+                detail="Critical negative news event detected (legal/default/fraud pattern). Pre-default alert triggered for RM review.",
+                source="News Intelligence (FinBERT)",
+                alert_sent=True,
+                acknowledged=False,
+            ))
+
         analysis.progress = 65.0
         db.commit()
-        await ws_push(analysis_id, 4, "News Intelligence Agent", f"Analysed {news_res.get('total_articles_scanned', 0)} articles · Sentiment Score: {analysis.news_risk_score:.0f}/100", 65, "completed")
+        await ws_push(analysis_id, 4, "News Intelligence Agent", f"Analysed {len(news_res.get('articles', []))} articles · External Risk Score: {analysis.news_risk_score:.0f}/100", 65, "completed")
 
         # Step 5: Scoring
         await ws_push(analysis_id, 5, "XGBoost + SHAP Credit Scoring", "Calculating Probability of Default (PD)", 75, "running")
@@ -262,7 +274,7 @@ async def run_analysis_background(analysis_id: int):
             },
             "news": {
                 "news_risk_score": analysis.news_risk_score,
-                "top_signals": news_res.get("signals", [])
+                "top_signals": news_res.get("articles", [])
             },
             "shap": {
                 "shap_factors": score_res.get("shap_factors", []),
@@ -307,6 +319,28 @@ async def run_analysis_background(analysis_id: int):
             actual_conditions.append("Promoter personal guarantee required")
         if gst_ratio > 20 and not is_bharat_precision:
             actual_conditions.append("Submit GST ITC reconciliation statement before disbursement")
+        if str(analysis.decision or "").upper() == "REJECT" and not is_bharat_precision:
+            actual_conditions = []
+
+        def _risk_from_sentiment(sentiment: str, impact_score: float) -> str:
+            s = str(sentiment or "").upper()
+            if s == "BEARISH":
+                return "CRITICAL" if impact_score >= 75 else "HIGH"
+            if s == "BULLISH":
+                return "LOW"
+            return "MEDIUM"
+
+        news_ui_signals = [
+            {
+                "source": item.get("source", "News Feed"),
+                "date": str(item.get("published", ""))[:10] if item.get("published") else datetime.now().strftime("%Y-%m-%d"),
+                "description": item.get("headline", ""),
+                "risk": _risk_from_sentiment(item.get("sentiment", "Neutral"), float(item.get("risk_impact_score", 40.0) or 40.0)),
+                "sentiment": item.get("sentiment", "Neutral"),
+                "risk_impact_score": item.get("risk_impact_score", 40.0),
+            }
+            for item in news_res.get("articles", [])
+        ]
             
         dashboard_results = {
             "shap": {
@@ -315,7 +349,7 @@ async def run_analysis_background(analysis_id: int):
                 "base_risk": score_res.get("base_risk", 16.0),
                 "final_pd": analysis.probability_of_default
             },
-            "news_signals": news_res.get("signals", []),
+            "news_signals": news_ui_signals,
             "recommendation": {
                 "decision_reasoning": (
                     "RECOMMENDED FOR APPROVAL subject to conditions. "

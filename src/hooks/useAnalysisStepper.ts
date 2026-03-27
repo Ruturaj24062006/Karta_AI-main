@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getAnalysisStatus } from '../services/analysisApi';
+import { WS_API_URL } from '../services/apiConfig';
 
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
 
@@ -37,8 +38,7 @@ export function useAnalysisStepper(analysisId: number | undefined) {
 
   const wsUrl = useMemo(() => {
     if (!analysisId) return '';
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${wsProtocol}//${window.location.host}/ws/analysis/${analysisId}`;
+    return `${WS_API_URL}/ws/analysis/${analysisId}`;
   }, [analysisId]);
 
   useEffect(() => {
@@ -130,7 +130,7 @@ export function useAnalysisStepper(analysisId: number | undefined) {
       } catch {
         // Ignore close errors.
       }
-    }, 2500);
+    }, 8000);
 
     ws.onopen = () => {
       opened = true;

@@ -53,32 +53,50 @@ def detect_bank_statement_stress(raw_text: str) -> Dict[str, Any]:
     """Stress detector for bank statement text.
 
     Rules:
-    - Count occurrences of "EMI BOUNCE" across statement text.
-    - If bounce count > 3 in 12 months, force loan recommendation to Reject.
-    - Flag OD utilization at/above 99.7% as a liquidity red flag.
+    - Count occurrences of "EMI BOUNCE" and "ECS RETURN" across statement text.
+    - If combined bounces > 5 in 12 months, set severe repayment-stress flag.
+    - Flag OD utilization above 95% as a critical liquidity red flag.
     """
     text = raw_text or ""
 
-    bounce_count = len(re.findall(r"\bemi\s*bounce\b", text, flags=re.IGNORECASE))
+    emi_bounce_count = len(re.findall(r"\bemi\s*bounce\b", text, flags=re.IGNORECASE))
+    ecs_return_count = len(re.findall(r"\becs\s*return\b", text, flags=re.IGNORECASE))
+    bounce_count = emi_bounce_count + ecs_return_count
     od_utilization_rate = _extract_od_utilization_rate(text)
+    stressed_doc_keywords = [
+        "stressed",
+        "manual annotation",
+        "handwritten",
+        "overwritten",
+        "illegible",
+        "tampered",
+    ]
+    manual_annotation_detected = any(k in text.lower() for k in ["manual annotation", "handwritten", "overwritten"])
+    stressed_document = any(k in text.lower() for k in stressed_doc_keywords)
 
-    emi_bounce_reject = bounce_count > 3
-    liquidity_red_flag = bool(od_utilization_rate is not None and od_utilization_rate >= 99.7)
+    emi_bounce_reject = bounce_count > 5
+    liquidity_red_flag = bool(od_utilization_rate is not None and od_utilization_rate > 95.0)
 
     stress_reasons = []
     if emi_bounce_reject:
         stress_reasons.append(
-            f"{bounce_count} EMI BOUNCE events found in the 12-month statement window (>3 threshold)."
+            f"{bounce_count} repayment failures (EMI BOUNCE + ECS RETURN) found in the 12-month window (>5 threshold)."
         )
     if liquidity_red_flag:
         stress_reasons.append(
-            f"OD utilization at {od_utilization_rate:.1f}% indicates near-limit liquidity stress."
+            f"OD utilization at {od_utilization_rate:.1f}% indicates critical liquidity stress (>95% threshold)."
         )
+    if stressed_document:
+        stress_reasons.append("Document appears stressed or manually annotated, reducing OCR trustworthiness.")
 
     return {
+        "emi_only_bounce_count_12m": emi_bounce_count,
+        "ecs_return_count_12m": ecs_return_count,
         "emi_bounce_count_12m": bounce_count,
         "emi_bounce_reject": emi_bounce_reject,
         "od_utilization_rate_percent": od_utilization_rate,
         "liquidity_red_flag": liquidity_red_flag,
+        "stressed_document": stressed_document,
+        "manual_annotation_detected": manual_annotation_detected,
         "stress_reasons": stress_reasons,
     }

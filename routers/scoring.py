@@ -47,6 +47,20 @@ def get_analysis_results(analysis_id: int, db: Session = Depends(get_db)):
     base_risk = dashboard_data.get("shap", {}).get("base_risk", 16.0)
     final_pd = analysis.probability_of_default or 31.0
     
+    raw_news_signals = dashboard_data.get("news_signals", [])
+    normalized_news_signals = []
+    for item in raw_news_signals:
+        if not isinstance(item, dict):
+            continue
+        normalized_news_signals.append({
+            "source": item.get("source", "News Feed"),
+            "date": item.get("date", ""),
+            "description": item.get("description") or item.get("headline") or "",
+            "risk": item.get("risk") or ("HIGH" if str(item.get("sentiment", "")).upper() == "BEARISH" else ("LOW" if str(item.get("sentiment", "")).upper() == "BULLISH" else "MEDIUM")),
+            "sentiment": item.get("sentiment", "Neutral"),
+            "risk_impact_score": item.get("risk_impact_score", 40.0),
+        })
+
     return {
         "company": {
             "company_name": company.company_name,
@@ -75,7 +89,7 @@ def get_analysis_results(analysis_id: int, db: Session = Depends(get_db)):
         },
         "news": {
             "news_risk_score": analysis.news_risk_score,
-            "top_signals": dashboard_data.get("news_signals", [])
+            "top_signals": normalized_news_signals
         },
         "risk_signals": dashboard_data.get("risk_signals", []),
         "recommendation": dashboard_data.get("recommendation", {

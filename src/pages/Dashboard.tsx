@@ -7,6 +7,7 @@ import { useApi, Skeleton, ErrorBanner } from '../services/useApi';
 import BackButton from '../components/BackButton';
 import SHAPWaterfallChart from '../components/ShapWaterfallChart';
 import SectorBenchmarkChart from '../components/SectorBenchmarkChart';
+import NewsIntelligenceCard from '../components/NewsIntelligenceCard';
 import './Dashboard.css';
 
 function colorByRisk(r: string) {
@@ -320,6 +321,8 @@ function Dashboard() {
             <div className="stat-bar"><div className="stat-bar-fill" style={{ width: `${Math.min(displayDataQuality, 100)}%`, backgroundColor: '#16A34A' }} /></div>
           </div>
         </div>
+
+        <NewsIntelligenceCard companyName={company.company_name || 'Unknown Company'} />
 
         <div className="two-cols">
           {/* SHAP Chart & Factors */}

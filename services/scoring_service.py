@@ -195,9 +195,25 @@ def calculate_credit_score(
         debt_service_coverage_ratio = extracted_data.get("debt_service_coverage_ratio", 1.3)
 
     emi_bounce_count_12m = int(extracted_data.get("emi_bounce_count_12m", 0) or 0)
+    emi_only_bounce_count_12m = int(extracted_data.get("emi_only_bounce_count_12m", 0) or 0)
+    ecs_return_count_12m = int(extracted_data.get("ecs_return_count_12m", 0) or 0)
     gst_mismatch_ratio = float(extracted_data.get("gst_mismatch_ratio", 0.0) or 0.0)
+    od_utilization_rate_percent = extracted_data.get("od_utilization_rate_percent")
+    try:
+        od_utilization_rate_percent = float(od_utilization_rate_percent) if od_utilization_rate_percent is not None else None
+    except Exception:
+        od_utilization_rate_percent = None
+
+    reserves_surplus = float(extracted_data.get("reserves_surplus", 0.0) or 0.0)
+    total_shareholders_funds = extracted_data.get("total_shareholders_funds")
+    try:
+        total_shareholders_funds = float(total_shareholders_funds) if total_shareholders_funds is not None else float(total_equity)
+    except Exception:
+        total_shareholders_funds = float(total_equity)
+
     active_npa_notice = bool(extracted_data.get("active_npa_notice", False))
     systemic_fraud_detected = bool(extracted_data.get("systemic_fraud_detected", False))
+    liquidity_red_flag = bool(extracted_data.get("liquidity_red_flag", False))
 
     is_bharat_precision = _is_bharat_precision_profile(extracted_data)
 
@@ -245,11 +261,21 @@ def calculate_credit_score(
     probability_of_default = model.predict_proba(df_pred)[0][1] * 100.0
 
     # Hard red-flag policy overrides from underwriting committee.
+    severe_gst_fraud = gst_mismatch_ratio > 120.0
+    severe_repayment_failure = emi_bounce_count_12m > 5
+    critical_liquidity_failure = bool(od_utilization_rate_percent is not None and od_utilization_rate_percent > 95.0)
+    negative_net_worth = total_shareholders_funds < 0.0
+    negative_reserves = reserves_surplus < 0.0
+
     hard_reject = (
-        ("HIGH" in str(fraud_flags).upper() and gst_mismatch_ratio > 20.0)
-        or emi_bounce_count_12m > 3
+        severe_gst_fraud
+        or severe_repayment_failure
+        or critical_liquidity_failure
+        or negative_net_worth
+        or negative_reserves
         or active_npa_notice
         or systemic_fraud_detected
+        or ("HIGH" in str(fraud_flags).upper() and gst_mismatch_ratio > 20.0)
     )
 
     # Case profile override: GST mismatch is treated as disbursement condition, not automatic reject.
@@ -263,15 +289,23 @@ def calculate_credit_score(
     # Ensure PD spikes above 80 when severe red flags are present.
     if hard_reject:
         severity_boost = 0.0
-        if emi_bounce_count_12m > 3:
-            severity_boost += min(8.0, (emi_bounce_count_12m - 3) * 2.0)
-        if gst_mismatch_ratio > 20.0:
-            severity_boost += min(8.0, (gst_mismatch_ratio - 20.0) * 0.25)
+        if severe_repayment_failure:
+            severity_boost += min(10.0, (emi_bounce_count_12m - 5) * 1.8)
+        if severe_gst_fraud:
+            severity_boost += 10.0
+        elif gst_mismatch_ratio > 20.0:
+            severity_boost += min(7.0, (gst_mismatch_ratio - 20.0) * 0.2)
+        if critical_liquidity_failure:
+            severity_boost += 8.0
+        if negative_net_worth or negative_reserves:
+            severity_boost += 9.0
         if active_npa_notice:
             severity_boost += 6.0
         if systemic_fraud_detected:
             severity_boost += 8.0
         probability_of_default = max(float(probability_of_default), min(98.0, 80.0 + severity_boost))
+        if severe_repayment_failure:
+            probability_of_default = max(probability_of_default, 98.0)
 
     if is_bharat_precision:
         probability_of_default = 27.8
@@ -302,8 +336,21 @@ def calculate_credit_score(
     # Frontend explanation should explicitly show red flags first when present.
     if emi_bounce_count_12m > 3:
         shap_factors.insert(0, {"name": "EMI Bounces", "impact": f"+{min(45.0, 20.0 + (emi_bounce_count_12m - 3) * 6.0):.1f}"})
+    if ecs_return_count_12m > 0:
+        shap_factors.insert(0, {"name": "ECS Return Events", "impact": f"+{min(25.0, 8.0 + ecs_return_count_12m * 3.0):.1f}"})
     if gst_mismatch_ratio > 20.0:
-        shap_factors.insert(0, {"name": "GST Mismatch Ratio", "impact": f"+{min(40.0, 18.0 + (gst_mismatch_ratio - 20.0) * 0.8):.1f}"})
+        bump = min(40.0, 18.0 + (gst_mismatch_ratio - 20.0) * 0.8)
+        if severe_gst_fraud:
+            bump = max(bump, 39.5)
+        shap_factors.insert(0, {"name": "GST Mismatch", "impact": f"+{bump:.1f}"})
+    if negative_reserves:
+        reserve_impact = min(42.0, 24.0 + abs(reserves_surplus) * 0.02)
+        shap_factors.insert(0, {"name": "Negative Reserves & Surplus", "impact": f"+{reserve_impact:.1f}"})
+    if negative_net_worth:
+        shap_factors.insert(0, {"name": "Eroded Shareholders Funds", "impact": "+35.0"})
+    if critical_liquidity_failure:
+        util = od_utilization_rate_percent or 95.0
+        shap_factors.insert(0, {"name": f"OD Utilization {util:.1f}%", "impact": "+22.0"})
     if active_npa_notice:
         shap_factors.insert(0, {"name": "Active NPA Notices", "impact": "+28.0"})
     if systemic_fraud_detected:
@@ -385,6 +432,43 @@ def calculate_credit_score(
     if is_bharat_precision:
         decision = "APPROVE"
 
+    if decision == "REJECT":
+        recommended_loan = 0.0
+
+    forensic_notes = []
+    if severe_gst_fraud:
+        forensic_notes.append(
+            f"GST forensic cross-verification shows {gst_mismatch_ratio:.1f}% mismatch between GSTR-3B claims and GSTR-2A supplier disclosures, breaching the 120% critical threshold."
+        )
+    elif gst_mismatch_ratio > 20.0:
+        forensic_notes.append(
+            f"GST reconciliation variance remains elevated at {gst_mismatch_ratio:.1f}% and requires forensic follow-up."
+        )
+
+    if severe_repayment_failure:
+        forensic_notes.append(
+            f"Repayment discipline failure detected: {emi_bounce_count_12m} total bounce events in 12 months ({emi_only_bounce_count_12m} EMI BOUNCE + {ecs_return_count_12m} ECS RETURN), exceeding the >5 rule."
+        )
+    if critical_liquidity_failure and od_utilization_rate_percent is not None:
+        forensic_notes.append(
+            f"OD utilization is persistently stressed at {od_utilization_rate_percent:.1f}% of limit, above the 95% critical liquidity threshold."
+        )
+    if negative_reserves:
+        forensic_notes.append(
+            f"Financial solvency breach: Reserves & Surplus are negative at ₹{reserves_surplus:,.2f}."
+        )
+    if negative_net_worth:
+        forensic_notes.append(
+            f"Total Shareholders' Funds are eroded at ₹{total_shareholders_funds:,.2f}, triggering hard rejection policy."
+        )
+    if active_npa_notice:
+        forensic_notes.append("NPA/default legal marker present in file-derived signals.")
+    if systemic_fraud_detected:
+        forensic_notes.append("Systemic fraud pattern detected from network and compliance analytics.")
+
+    if not forensic_notes:
+        forensic_notes.append("No hard-forensic breaches detected in the submitted ledgers and statements.")
+
     result = {
         "probability_of_default": float(probability_of_default),
         "recommended_interest_rate": round(final_interest_rate, 2),
@@ -401,7 +485,11 @@ def calculate_credit_score(
             "Two EMI bounces were subsequently regularized with stable monthly inflows in the 4.5-5.5 Lakhs range. "
             "GST ITC mismatch of 34.1% is categorized as a pre-disbursement compliance condition, not a hard rejection trigger. "
             "RECOMMENDED FOR APPROVAL subject to conditions."
-        ) if is_bharat_precision else f"XGBoost quantitative model predicts a {probability_of_default:.1f}% Probability of Default factoring aggregated RAG signals. The requested loan amount has been structurally adjusted downwards strictly enforcing the 1.2x DSCR covenant minimum. Final pricing reflects a combined {(credit_spread+fraud_premium+sector_premium):.1f}% cumulative credit premium bounded securely against RBI Base Logic.",
+        ) if is_bharat_precision else (
+            f"Deep-dive forensic audit completed on uploaded ledgers and repayment files. "
+            f"Model PD={probability_of_default:.1f}% with decision {decision}. "
+            + " ".join(forensic_notes)
+        ),
         "shap_chart_path": hosted_chart_url,
         "shap_factors": shap_factors
     }

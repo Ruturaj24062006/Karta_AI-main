@@ -34,3 +34,4 @@ sendgrid
 apscheduler
 python-jose[cryptography]
 passlib
+transformers

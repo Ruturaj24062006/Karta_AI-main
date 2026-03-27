@@ -9,7 +9,7 @@ from fastapi import Depends
 from database import engine, Base, SessionLocal, get_db
 from sqlalchemy.orm import Session
 from utils.demo_data import load_demo_data, reset_demo_data
-from routers import upload, analyze, fraud, scoring, cam, ews, health, ws, history, ews_ws, health_live, auth
+from routers import upload, analyze, fraud, scoring, cam, ews, health, ws, history, ews_ws, health_live, auth, news
 from services.auth_security import ensure_default_users, check_admin_role
 from models.user import User
 
@@ -55,6 +55,7 @@ app.include_router(cam.router, tags=["CAM"])
 app.include_router(ews.router, tags=["EWS"])
 app.include_router(history.router, tags=["History"])
 app.include_router(auth.router, tags=["Auth"])
+app.include_router(news.router, tags=["News"])
 app.include_router(health.router)
 app.include_router(ws.router)
 app.include_router(ews_ws.router)          # EWS WebSocket: ws://localhost:8000/ws/ews/{id}

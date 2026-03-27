@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Triangle, CloudUpload, FileUp, FileText, CheckCircle2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getAnalysisStatus, triggerAnalysis } from '../services/analysisApi';
+import { triggerAnalysis } from '../services/analysisApi';
 import { uploadCompanyDocuments } from '../services/uploadApi';
 import { ErrorBanner } from '../services/useApi';
 import BackButton from '../components/BackButton';
@@ -67,29 +67,6 @@ function NewAnalysis() {
     return payload;
   };
 
-  const waitForBackendStatus = async (analysisId: number): Promise<void> => {
-    const maxAttempts = 25;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      try {
-        const status = await getAnalysisStatus(analysisId);
-        const backendPct = Math.max(0, Math.min(100, Math.round(status.percentage_complete || 0)));
-        setUploadPct((prev) => Math.max(prev, backendPct));
-        setStatusText(`Backend status: ${status.status} (${backendPct}%)`);
-
-        if (status.status === 'processing' || status.status === 'completed') {
-          return;
-        }
-        if (status.status === 'failed') {
-          throw new Error(status.failure_reason || 'Backend processing failed.');
-        }
-      } catch (err) {
-        if (attempt === maxAttempts - 1) throw err;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 800));
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -107,13 +84,15 @@ function NewAnalysis() {
     try {
       // STEP 1: Upload files with real byte progress and server response handling.
       const result = await handleUpload();
+      setUploadPct(100);
+      setStatusText('Upload complete. Starting analysis pipeline...');
 
       // STEP 2: Trigger analysis pipeline and listen to backend status endpoint.
       setStatusText('Triggering backend analysis...');
       await triggerAnalysis(result.analysis_id);
-      await waitForBackendStatus(result.analysis_id);
 
-      // STEP 3: Go to the analysis loading screen
+      // STEP 3: Go immediately to the analysis loading screen.
+      // Upload API already starts phase-1 OCR in background.
       navigate(`/analysis?id=${result.analysis_id}`);
     } catch (err: any) {
       setErrorMsg(err.userMessage || err.message || 'Upload failed. Check backend connection.');

@@ -7,6 +7,12 @@ import api, { BASE_URL } from './apiConfig';
 export interface SHAPFactor  { name: string; impact: string; }
 export interface NewsSignal  { source: string; date: string; description: string; }
 export interface FraudSignal { type: string; risk_level: string; description: string; evidence_amount: number; confidence_score: number; source: string; }
+export interface RiskSignalItem {
+  category: string;
+  type: 'strength' | 'warning';
+  title: string;
+  detail: string;
+}
 
 export interface FullResults {
   company: {
@@ -42,6 +48,7 @@ export interface FullResults {
     news_risk_score: number;
     top_signals: NewsSignal[];
   };
+  risk_signals?: RiskSignalItem[];
   recommendation: {
     decision_reasoning: string;
     conditions: string[];
@@ -52,7 +59,9 @@ export interface FullResults {
 
 /** Fetch full dashboard results from real DB-backed analysis */
 export async function getFullResults(analysisId: number): Promise<FullResults> {
-  const res = await api.get<FullResults>(`/api/results/${analysisId}`);
+  const res = await api.get<FullResults>(`/api/results/${analysisId}`, {
+    timeout: 180_000,
+  });
   return res.data;
 }
 

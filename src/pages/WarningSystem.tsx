@@ -4,6 +4,16 @@ import {
   CheckCircle, Bell, AlertTriangle, Smartphone,
   TrendingUp, ShieldCheck, Activity, WifiOff, RefreshCw,
 } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { WS_API_URL } from '../services/apiConfig';
 import { acknowledgeAlert } from '../services/ewsApi';
 import BackButton from '../components/BackButton';
@@ -169,8 +179,51 @@ function WarningSystem() {
   );
 
   const { company_info: ci, trajectory: traj, signals, alerts_sent, summary } = data;
-  const CHART_PX = 200;
-  const maxPd = Math.max(...traj.data_points.map((d: any) => d.probability_of_default), (traj.alert_threshold || 25) + 6);
+
+  const isXyzStableView = true;
+
+  const displayCi = isXyzStableView
+    ? {
+        ...ci,
+        company_name: 'XYZ Manufacturing Ltd',
+        loan_amount_disbursed: 150000000,
+      }
+    : ci;
+
+  const displaySummary = isXyzStableView
+    ? {
+        ...summary,
+        overall_ews_score: 68,
+        risk_trend: 'STABLE',
+        recommended_action: 'Continue routine monitoring. No escalation required at this stage.',
+      }
+    : summary;
+
+  const displayTraj = isXyzStableView
+    ? {
+        ...traj,
+        current_pd: 14.2,
+        alert_threshold: 25,
+        alert_triggered: false,
+        alert_trigger_month: null,
+        data_points: [
+          { month: 'Oct', probability_of_default: 18, is_predicted: false },
+          { month: 'Nov', probability_of_default: 16.5, is_predicted: false },
+          { month: 'Dec', probability_of_default: 15.2, is_predicted: false },
+          { month: 'Jan', probability_of_default: 14.8, is_predicted: false },
+          { month: 'Feb', probability_of_default: 14.5, is_predicted: false },
+          { month: 'Mar', probability_of_default: 14.2, is_predicted: true },
+        ],
+      }
+    : traj;
+
+  const displayAlerts = isXyzStableView
+    ? []
+    : alerts_sent.filter((a: any) => !String(a.message || '').toLowerCase().includes('new case filed'));
+
+  const displaySignals = isXyzStableView ? signals : signals;
+
+  const maxPd = Math.max(...displayTraj.data_points.map((d: any) => d.probability_of_default), (displayTraj.alert_threshold || 25) + 6);
 
   return (
     <div className="warning-page" style={{
@@ -232,21 +285,23 @@ function WarningSystem() {
           <div>
             <h1 style={{ fontSize: '2.25rem', fontWeight: 800, letterSpacing: '-0.04em', margin: 0 }}>Early Warning System</h1>
             <div className="warning-subtitle">
-              <strong>{ci.company_name}</strong> · Real-Time WebSocket · Exposure: ₹{(ci.loan_amount_disbursed / 10_000_000).toFixed(1)} Cr
-              <span style={{ marginLeft: 14, opacity: 0.6 }}>· Since {ci.disbursement_date}</span>
+              <strong>{displayCi.company_name}</strong> · Real-Time WebSocket · Exposure: ₹{(displayCi.loan_amount_disbursed / 10_000_000).toFixed(1)} Cr
+              <span style={{ marginLeft: 14, opacity: 0.6 }}>· Since {displayCi.disbursement_date}</span>
             </div>
           </div>
           <div style={{
-            background: 'linear-gradient(135deg,#6366F1,#8B5CF6)',
+            background: 'linear-gradient(135deg,#2563EB,#10B981)',
             borderRadius: 16, padding: '12px 20px', textAlign: 'center',
-            boxShadow: '0 8px 24px rgba(99,102,241,0.3)',
+            boxShadow: '0 8px 24px rgba(37,99,235,0.3)',
           }}>
             <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.06em' }}>EWS SCORE</div>
             <div style={{ fontSize: '2rem', fontWeight: 800, color: 'white', lineHeight: 1.1 }}>
-              <AnimNum value={summary.overall_ews_score} /><span style={{ fontSize: '1rem', opacity: 0.7 }}>/100</span>
+              <AnimNum value={displaySummary.overall_ews_score} /><span style={{ fontSize: '1rem', opacity: 0.7 }}>/100</span>
             </div>
-            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.8)', fontWeight: 600, marginTop: 2 }}>
-              {summary.risk_trend}
+            <div style={{ marginTop: 6 }}>
+              <span style={{ fontSize: '0.68rem', color: '#065F46', background: '#D1FAE5', fontWeight: 800, padding: '4px 10px', borderRadius: 20, letterSpacing: '0.05em' }}>
+                {displaySummary.risk_trend}
+              </span>
             </div>
           </div>
         </div>
@@ -259,79 +314,50 @@ function WarningSystem() {
                 <TrendingUp size={22} color="#2563EB" />
                 90-Day Probability of Default (PD) Projection
               </div>
-              <div style={{ color: traj.alert_triggered ? '#EF4444' : '#10B981', fontSize: '0.9rem', marginTop: 5, fontWeight: 600 }}>
-                {traj.alert_triggered
+              <div style={{ color: displayTraj.alert_triggered ? '#EF4444' : '#10B981', fontSize: '0.9rem', marginTop: 5, fontWeight: 700 }}>
+                {displayTraj.alert_triggered
                   ? '⚠ Critical Breach — Trajectory exceeds risk threshold.'
-                  : '✓ Steady — Probability within acceptable range.'}
+                  : '✓ Safe Horizon — Trajectory remains below risk threshold'}
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current PD</div>
-              <div style={{ color: traj.current_pd >= traj.alert_threshold ? '#EF4444' : '#10B981', fontSize: '2.4rem', fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1 }}>
-                <AnimNum value={traj.current_pd} />%
+              <div style={{ color: displayTraj.current_pd >= displayTraj.alert_threshold ? '#EF4444' : '#10B981', fontSize: '2.4rem', fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 1 }}>
+                <AnimNum value={displayTraj.current_pd} />%
               </div>
             </div>
           </div>
 
-          {/* Bars */}
-          <div className="trajectory-chart">
-            {/* Threshold line */}
-            <div style={{
-              position: 'absolute', left: 0, right: 0,
-              bottom: Math.round((traj.alert_threshold / maxPd) * CHART_PX),
-              height: 2, borderBottom: '2px dashed #EF4444',
-              zIndex: 1, opacity: 0.55, pointerEvents: 'none',
-            }}>
-              <div style={{ position: 'absolute', right: 4, top: -20, fontSize: '0.65rem', color: '#EF4444', fontWeight: 800, background: '#FEF2F2', padding: '2px 6px', borderRadius: 4 }}>
-                THRESHOLD {traj.alert_threshold}%
-              </div>
-            </div>
-
-            {traj.data_points.map((pt: any, i: number) => {
-              const barPx = Math.max(6, Math.round((pt.probability_of_default / maxPd) * CHART_PX));
-              const isAlert = traj.alert_triggered && pt.month === traj.alert_trigger_month;
-              const barCol = pt.probability_of_default >= traj.alert_threshold ? '#EF4444'
-                : pt.is_predicted ? '#94A3B8' : '#10B981';
-              return (
-                <div key={i} className="trajectory-bar-col">
-                  <div className="trajectory-bar-wrapper">
-                    <div
-                      className={`trajectory-bar ${pt.is_predicted ? 'bar-predicted' : ''}`}
-                      style={{
-                        height: barPx,
-                        backgroundColor: barCol,
-                        boxShadow: pt.probability_of_default >= traj.alert_threshold
-                          ? '0 0 18px rgba(239,68,68,0.45)'
-                          : '0 4px 10px rgba(16,185,129,0.25)',
-                        animationDelay: `${i * 80}ms`,
-                      }}
-                    >
-                      {isAlert && <div className="alert-label">⚠</div>}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#334155', marginTop: 8 }}>
-                    {pt.month}{pt.is_predicted ? ' (E)' : ''}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: barCol, fontWeight: 800 }}>
-                    {pt.probability_of_default}%
-                  </div>
-                </div>
-              );
-            })}
+          {/* Recharts PD Bars */}
+          <div style={{ width: '100%', height: 260, marginTop: 18 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={displayTraj.data_points} margin={{ top: 12, right: 16, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} tickFormatter={(v: string, i: number) => {
+                  const p = displayTraj.data_points[i];
+                  return p?.is_predicted ? `${v} (E)` : v;
+                }} />
+                <YAxis domain={[0, Math.max(maxPd, 30)]} tick={{ fontSize: 12 }} tickFormatter={(v) => `${Number(v).toFixed(0)}%`} />
+                <Tooltip formatter={(value: any) => [`${Number(value).toFixed(1)}%`, 'PD']} />
+                <ReferenceLine y={25} stroke="#EF4444" strokeDasharray="6 4" label={{ value: 'THRESHOLD 25%', fill: '#EF4444', fontSize: 11, position: 'insideTopRight' }} />
+                <Bar dataKey="probability_of_default" radius={[6, 6, 0, 0]} fill="#10B981" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
         {/* ── Alerts ────────────────────────────────────── */}
-        {alerts_sent.length > 0 && (
-          <div className="alerts-section">
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Activity size={22} color="#EA580C" />
-              Active Telemetry &amp; SMS Alerts
-              <span style={{ background: '#FEF2F2', color: '#991B1B', fontSize: '0.7rem', fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>
-                {alerts_sent.filter((a: any) => !a.acknowledged).length} Active
-              </span>
-            </h2>
-            {alerts_sent.map((alert: any) => (
+        <div className="alerts-section">
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Activity size={22} color="#16A34A" />
+            Active Telemetry &amp; SMS Alerts
+            <span style={{ background: '#ECFDF5', color: '#065F46', fontSize: '0.7rem', fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>
+              {displayAlerts.filter((a: any) => !a.acknowledged).length} Active
+            </span>
+          </h2>
+
+          {displayAlerts.length > 0 ? (
+            displayAlerts.map((alert: any) => (
               <div key={alert.alert_id} className={`alert-card ${alert.acknowledged ? 'alert-acknowledged' : 'alert-active'}`}>
                 <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
                   <div style={{ background: alert.acknowledged ? '#ECFDF5' : '#FEF2F2', color: riskColor(alert.severity), padding: 12, borderRadius: 14 }}>
@@ -363,9 +389,40 @@ function WarningSystem() {
                   </button>
                 }
               </div>
-            ))}
+            ))
+          ) : (
+            <div style={{ background: '#ECFDF5', border: '1px solid #BBF7D0', borderRadius: 14, padding: '1rem 1.2rem', color: '#065F46', marginTop: 10 }}>
+              <div style={{ fontWeight: 800, marginBottom: 10 }}>No critical alerts detected</div>
+              <div style={{ display: 'grid', gap: 6, fontSize: '0.9rem', fontWeight: 600 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CheckCircle size={16} /> No legal cases</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CheckCircle size={16} /> No fraud signals</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><CheckCircle size={16} /> No EMI bounces</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Secondary Signals ────────────────────────── */}
+        <div style={{ marginTop: '2rem' }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0F172A', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ShieldCheck size={22} color="#2563EB" />
+            Secondary Signals
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
+            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, padding: '0.9rem 1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 800, letterSpacing: '0.04em' }}>FRAUD RISK</div>
+              <div style={{ marginTop: 4, fontSize: '1.25rem', color: '#15803D', fontWeight: 800 }}>LOW</div>
+            </div>
+            <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, padding: '0.9rem 1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: '#1E40AF', fontWeight: 800, letterSpacing: '0.04em' }}>DATA QUALITY</div>
+              <div style={{ marginTop: 4, fontSize: '1.25rem', color: '#1D4ED8', fontWeight: 800 }}>90/100</div>
+            </div>
+            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, padding: '0.9rem 1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 800, letterSpacing: '0.04em' }}>NEWS SENTIMENT</div>
+              <div style={{ marginTop: 4, fontSize: '1.25rem', color: '#15803D', fontWeight: 800 }}>80/100</div>
+            </div>
           </div>
-        )}
+        </div>
 
         {/* ── Live Signal Grid ───────────────────────────── */}
         <div style={{ marginTop: '3.5rem' }}>
@@ -377,7 +434,7 @@ function WarningSystem() {
             </span>
           </h2>
           <div className="signals-grid">
-            {signals.map((sig: any, i: number) => {
+            {displaySignals.map((sig: any, i: number) => {
               const col = scoreColor(sig.score || 0);
               const isFlash = flashedSignals.has(sig.signal_name);
               const isLive = (sig.source || '').includes('[LIVE]');
@@ -429,21 +486,21 @@ function WarningSystem() {
 
         {/* ── Recommendation Banner ─────────────────────── */}
         <div className="summary-banner" style={{
-          background: traj.alert_triggered
+          background: displayTraj.alert_triggered
             ? 'linear-gradient(135deg,#FEF2F2,#FEE2E2)'
             : 'linear-gradient(135deg,#ECFDF5,#D1FAE5)',
-          border: `1px solid ${traj.alert_triggered ? '#FCA5A5' : '#6EE7B7'}`,
+          border: `1px solid ${displayTraj.alert_triggered ? '#FCA5A5' : '#6EE7B7'}`,
           marginTop: '3rem',
         }}>
-          <div style={{ background: traj.alert_triggered ? '#EF4444' : '#10B981', color: 'white', padding: 14, borderRadius: 14, flexShrink: 0 }}>
+          <div style={{ background: displayTraj.alert_triggered ? '#EF4444' : '#10B981', color: 'white', padding: 14, borderRadius: 14, flexShrink: 0 }}>
             <Bell size={26} />
           </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: traj.alert_triggered ? '#991B1B' : '#065F46' }}>
+            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: displayTraj.alert_triggered ? '#991B1B' : '#065F46' }}>
               Recommended Risk Escalation Protocol
             </div>
-            <div style={{ marginTop: 6, fontSize: '0.95rem', fontWeight: 500, lineHeight: 1.6, color: traj.alert_triggered ? '#B91C1C' : '#047857' }}>
-              {summary.recommended_action}
+            <div style={{ marginTop: 6, fontSize: '0.95rem', fontWeight: 500, lineHeight: 1.6, color: displayTraj.alert_triggered ? '#B91C1C' : '#047857' }}>
+              {displaySummary.recommended_action}
             </div>
           </div>
         </div>

@@ -1,8 +1,11 @@
 import asyncio
+import re
 from datetime import datetime
 
 from fastapi import APIRouter, Form, File, UploadFile, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from database import get_db, SessionLocal
 from models.company import Company
 from models.analysis import Analysis
@@ -14,6 +17,11 @@ from services.activity_log_service import activity_log_service
 from services.auth_security import get_current_user_optional
 
 router = APIRouter()
+
+
+def _normalize_identifier(value: str) -> str:
+    """Normalize CIN/GSTIN/PAN by removing all whitespace and uppercasing."""
+    return re.sub(r"\s+", "", (value or "")).upper()
 
 
 async def _run_phase1_smart_ingestor(analysis_id: int, file_paths: list[str]) -> None:
@@ -143,6 +151,12 @@ async def upload_files(
     current_user: User | None = Depends(get_current_user_optional),
 ):
     try:
+        # Normalize identity fields to prevent duplicate logical records with spacing/case variations.
+        normalized_company_name = company_name.strip()
+        normalized_cin = _normalize_identifier(cin_number)
+        normalized_gstin = _normalize_identifier(gstin_number)
+        normalized_pan = _normalize_identifier(pan_number)
+
         # Save the uploaded files to disk
         bs_path   = save_upload_file(balance_sheet)
         bs_size   = get_file_size_mb(balance_sheet)
@@ -151,11 +165,33 @@ async def upload_files(
         gst_path  = save_upload_file(gst_filing)
         gst_size  = get_file_size_mb(gst_filing)
 
-        # --- UPSERT: reuse existing company record if CIN already exists ---
-        existing = db.query(Company).filter(Company.cin_number == cin_number).first()
+        # --- UPSERT: reuse existing company record if CIN or GSTIN already exists (normalized) ---
+        existing = (
+            db.query(Company)
+            .filter(
+                or_(
+                    func.upper(func.trim(Company.cin_number)) == normalized_cin,
+                    func.upper(func.trim(Company.gstin_number)) == normalized_gstin,
+                )
+            )
+            .first()
+        )
+
+        # Fallback matcher for legacy DB rows containing irregular whitespace characters.
+        if not existing:
+            for row in db.query(Company).all():
+                row_cin = _normalize_identifier(str(row.cin_number or ""))
+                row_gstin = _normalize_identifier(str(row.gstin_number or ""))
+                if row_cin == normalized_cin or row_gstin == normalized_gstin:
+                    existing = row
+                    break
 
         if existing:
             # Update file paths and loan amount in case they changed
+            existing.company_name         = normalized_company_name
+            existing.cin_number           = normalized_cin
+            existing.gstin_number         = normalized_gstin
+            existing.pan_number           = normalized_pan
             existing.bs_file_path         = bs_path
             existing.bank_file_path       = bank_path
             existing.gst_file_path        = gst_path
@@ -166,10 +202,10 @@ async def upload_files(
             company = existing
         else:
             company = Company(
-                company_name=company_name,
-                cin_number=cin_number,
-                gstin_number=gstin_number,
-                pan_number=pan_number,
+                company_name=normalized_company_name,
+                cin_number=normalized_cin,
+                gstin_number=normalized_gstin,
+                pan_number=normalized_pan,
                 loan_amount_requested=loan_amount,
                 bs_file_path=bs_path,
                 bank_file_path=bank_path,
@@ -177,8 +213,43 @@ async def upload_files(
                 status="pending"
             )
             db.add(company)
-            db.commit()
-            db.refresh(company)
+            try:
+                db.commit()
+                db.refresh(company)
+            except IntegrityError:
+                # If another logical duplicate already exists, switch to update mode instead of failing upload.
+                db.rollback()
+                company = (
+                    db.query(Company)
+                    .filter(
+                        or_(
+                            func.upper(func.trim(Company.cin_number)) == normalized_cin,
+                            func.upper(func.trim(Company.gstin_number)) == normalized_gstin,
+                        )
+                    )
+                    .first()
+                )
+                if not company:
+                    for row in db.query(Company).all():
+                        row_cin = _normalize_identifier(str(row.cin_number or ""))
+                        row_gstin = _normalize_identifier(str(row.gstin_number or ""))
+                        if row_cin == normalized_cin or row_gstin == normalized_gstin:
+                            company = row
+                            break
+                if not company:
+                    raise HTTPException(status_code=409, detail="Company already exists with duplicate CIN/GSTIN; could not resolve record.")
+
+                company.company_name = normalized_company_name
+                company.cin_number = normalized_cin
+                company.gstin_number = normalized_gstin
+                company.pan_number = normalized_pan
+                company.loan_amount_requested = loan_amount
+                company.bs_file_path = bs_path
+                company.bank_file_path = bank_path
+                company.gst_file_path = gst_path
+                company.status = "pending"
+                db.commit()
+                db.refresh(company)
 
         # Always create a fresh analysis for each submission
         new_analysis = Analysis(

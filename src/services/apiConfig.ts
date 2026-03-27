@@ -44,20 +44,27 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    const status  = error.response?.status;
-    const detail  = error.response?.data?.detail || error.message || 'Unknown server error';
+    const isTimeout = error.code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout');
+    const hasResponse = !!error.response;
+    const status = hasResponse ? error.response?.status : null;
+    const detail = error.response?.data?.detail || error.message || 'Unknown server error';
     const url     = error.config?.url || '';
 
-    console.error(`[KARTA API ERROR] ${url} → ${status}: ${detail}`);
+    console.error(`[KARTA API ERROR] ${url} → ${status ?? 'NETWORK'}: ${detail}`);
 
     // Enrich error so UI components can read .userMessage directly
-    error.userMessage =
-      status === 0       ? `Cannot reach KARTA backend at ${BASE_URL}.` :
-      status === 400     ? `Bad request: ${detail}` :
-      status === 404     ? `Not found: ${detail}` :
-      status === 422     ? `Validation error: ${detail}` :
-      status === 500     ? `Server error: ${detail}` :
-                           `Error (${status}): ${detail}`;
+    if (!hasResponse) {
+      error.userMessage = isTimeout
+        ? `Request timed out after ${Math.round((error.config?.timeout || 0) / 1000)}s for ${url || 'this endpoint'}. Backend may still be processing. Please retry in a few moments.`
+        : `Network error: backend is unreachable at ${BASE_URL}. Start FastAPI server on port 8000 and retry.`;
+    } else {
+      error.userMessage =
+        status === 400 ? `Bad request: ${detail}` :
+        status === 404 ? `Not found: ${detail}` :
+        status === 422 ? `Validation error: ${detail}` :
+        status === 500 ? `Server error: ${detail}` :
+        `Error (${status}): ${detail}`;
+    }
 
     return Promise.reject(error);
   }

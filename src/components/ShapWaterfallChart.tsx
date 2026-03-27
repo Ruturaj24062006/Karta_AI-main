@@ -27,6 +27,7 @@ type WaterfallRow = {
 type Props = {
   drivers: RiskDriverInput[];
   baseRisk?: number;
+  referenceLabel?: string;
   height?: number;
 };
 
@@ -72,7 +73,7 @@ function buildWaterfallData(drivers: RiskDriverInput[], baseRisk: number): Water
   return rows;
 }
 
-export default function SHAPWaterfallChart({ drivers, baseRisk = 0, height = 320 }: Props) {
+export default function SHAPWaterfallChart({ drivers, baseRisk = 0, referenceLabel = 'E[f(x)]', height = 320 }: Props) {
   const chartData = buildWaterfallData(drivers, baseRisk);
 
   return (
@@ -112,7 +113,7 @@ export default function SHAPWaterfallChart({ drivers, baseRisk = 0, height = 320
           y={baseRisk}
           stroke="#64748B"
           strokeDasharray="4 4"
-          label={{ value: 'Base Risk', position: 'insideTopRight', fill: '#64748B', fontSize: 11 }}
+          label={{ value: `${referenceLabel}: ${baseRisk.toFixed(1)}%`, position: 'insideTopRight', fill: '#64748B', fontSize: 11 }}
         />
 
         <Bar dataKey="offset" stackId="wf" fill="transparent" isAnimationActive={false} />
@@ -133,7 +134,7 @@ export default function SHAPWaterfallChart({ drivers, baseRisk = 0, height = 320
 
             let color = '#94A3B8';
             if (payload.direction === 'up') color = '#DC2626';
-            if (payload.direction === 'down') color = '#16A34A';
+            if (payload.direction === 'down') color = '#2563EB';
             if (payload.direction === 'total') color = '#1D4ED8';
 
             return <rect x={x} y={y} width={width} height={height} fill={color} rx={4} ry={4} />;

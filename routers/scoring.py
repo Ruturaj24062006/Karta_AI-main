@@ -77,6 +77,7 @@ def get_analysis_results(analysis_id: int, db: Session = Depends(get_db)):
             "news_risk_score": analysis.news_risk_score,
             "top_signals": dashboard_data.get("news_signals", [])
         },
+        "risk_signals": dashboard_data.get("risk_signals", []),
         "recommendation": dashboard_data.get("recommendation", {
             "decision_reasoning": "Analysis generated via automated ML pipeline.",
             "conditions": [],

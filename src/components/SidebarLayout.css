@@ -1,0 +1,21 @@
+.sidebar-layout-wrapper {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar-layout-content {
+  flex: 1;
+  margin-left: 280px;
+  width: calc(100% - 280px);
+  min-height: 100vh;
+  background: #f1f5f9;
+  overflow-y: auto;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .sidebar-layout-content {
+    margin-left: 70px;
+    width: calc(100% - 70px);
+  }
+}

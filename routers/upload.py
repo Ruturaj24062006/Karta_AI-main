@@ -6,9 +6,12 @@ from sqlalchemy.orm import Session
 from database import get_db, SessionLocal
 from models.company import Company
 from models.analysis import Analysis
+from models.user import User
 from utils.file_handler import save_upload_file, get_file_size_mb
 from routers.ws import manager
 from services import ocr_service
+from services.activity_log_service import activity_log_service
+from services.auth_security import get_current_user_optional
 
 router = APIRouter()
 
@@ -136,7 +139,8 @@ async def upload_files(
     balance_sheet: UploadFile = File(...),
     bank_statement: UploadFile = File(...),
     gst_filing: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
 ):
     try:
         # Save the uploaded files to disk
@@ -193,6 +197,13 @@ async def upload_files(
             _run_phase1_smart_ingestor,
             new_analysis.id,
             [bs_path, bank_path, gst_path],
+        )
+
+        actor = current_user.username if current_user else "unknown"
+        activity_log_service.log(
+            actor,
+            "upload",
+            f"Uploaded financial documents for {company.company_name} (analysis_id={new_analysis.id})",
         )
 
         return {

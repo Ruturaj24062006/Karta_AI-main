@@ -9,7 +9,9 @@ from fastapi import Depends
 from database import engine, Base, SessionLocal, get_db
 from sqlalchemy.orm import Session
 from utils.demo_data import load_demo_data, reset_demo_data
-from routers import upload, analyze, fraud, scoring, cam, ews, health, ws, history, ews_ws, health_live
+from routers import upload, analyze, fraud, scoring, cam, ews, health, ws, history, ews_ws, health_live, auth
+from services.auth_security import ensure_default_users, check_admin_role
+from models.user import User
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,6 +22,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         load_demo_data(db)
+        ensure_default_users(db)
     finally:
         db.close()
         
@@ -51,6 +54,7 @@ app.include_router(scoring.router, tags=["Scoring"])
 app.include_router(cam.router, tags=["CAM"])
 app.include_router(ews.router, tags=["EWS"])
 app.include_router(history.router, tags=["History"])
+app.include_router(auth.router, tags=["Auth"])
 app.include_router(health.router)
 app.include_router(ws.router)
 app.include_router(ews_ws.router)          # EWS WebSocket: ws://localhost:8000/ws/ews/{id}
@@ -61,6 +65,9 @@ def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
 @app.get("/api/demo/reset")
-def demo_reset(db: Session = Depends(get_db)):
+def demo_reset(
+    db: Session = Depends(get_db),
+    _: User = Depends(check_admin_role),
+):
     reset_demo_data(db)
     return {"success": True, "message": "Demo data reset successfully"}

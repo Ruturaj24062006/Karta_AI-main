@@ -31,3 +31,5 @@ networkx
 twilio
 sendgrid
 apscheduler
+python-jose[cryptography]
+passlib

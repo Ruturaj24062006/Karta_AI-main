@@ -4,6 +4,7 @@
  * Base URL reads from env VITE_API_URL.
  */
 import axios from 'axios';
+import { getAuthToken } from './auth';
 
 export const BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`;
 export const WS_API_URL = BASE_URL.replace(/^http/i, 'ws');
@@ -25,6 +26,11 @@ api.interceptors.request.use(
   (config) => {
     // Stamp every request with a start time for timing logs
     (config as any)._startTime = Date.now();
+    const token = getAuthToken();
+    if (token) {
+      config.headers = config.headers || {};
+      (config.headers as any).Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => Promise.reject(error)

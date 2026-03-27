@@ -1,0 +1,29 @@
+.admin-page-header {
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 20px 32px;
+  margin-bottom: 20px;
+}
+
+.page-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.page-description {
+  font-size: 13px;
+  color: #7f8894;
+  margin: 6px 0 0 0;
+}
+
+@media (max-width: 768px) {
+  .admin-page-header {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+}

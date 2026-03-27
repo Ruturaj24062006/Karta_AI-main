@@ -189,10 +189,6 @@
   justify-self: end;
 }
 
-.home-page .home-back-btn {
-  flex-shrink: 0;
-}
-
 .home-page .nav-links a:hover {
   color: var(--primary);
 }

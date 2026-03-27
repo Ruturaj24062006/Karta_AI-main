@@ -1,6 +1,5 @@
 import { Shield, Zap, TrendingUp, PlayCircle, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import BackButton from '../components/BackButton';
 import './Home.css';
 
 function Home() {
@@ -9,7 +8,6 @@ function Home() {
       <nav className="navbar">
         <div className="container flex items-center justify-between">
           <div className="nav-left">
-            <BackButton fallbackTo="/" label="Back" className="home-back-btn" />
             <div className="nav-links">
               <Link to="/history">History</Link>
               <a href="#">Product</a>

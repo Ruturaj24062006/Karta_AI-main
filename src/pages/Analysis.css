@@ -1,0 +1,303 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+.analysis-running-page {
+  --primary: #1F3663;
+  --primary-hover: #16264A;
+  --text-dark: #0F172A;
+  --text-gray: #475569;
+  --text-light: #64748B;
+  --text-lighter: #94A3B8;
+  --bg-color: #FAFAFA;
+  --card-bg: #FFFFFF;
+  --border-color: #E2E8F0;
+  
+  --success-bg: #DCFCE7;
+  --success-color: #16A34A;
+  --active-bg: #F1F5F9;
+  --active-color: #1F3663;
+  --pending-bg: #F1F5F9;
+  --pending-color: #94A3B8;
+
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--text-dark);
+  background-color: var(--bg-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Navbar */
+.analysis-running-page .navbar {
+  background-color: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  padding: 1rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.analysis-running-page .logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+}
+
+.analysis-running-page .nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.analysis-running-page .icon-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background-color: #F1F5F9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-gray);
+  cursor: pointer;
+}
+
+.analysis-running-page .avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background-color: #FDE68A; /* slight yellow-orange tint from screenshot */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* Main Content */
+.analysis-running-page .main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3rem 1.5rem;
+}
+
+/* Tracking Card */
+.analysis-running-page .tracking-card {
+  background: var(--card-bg);
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-color);
+  width: 100%;
+  max-width: 800px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+}
+
+.analysis-running-page .tracking-header {
+  padding: 2rem 2.5rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.analysis-running-page .header-left h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.01em;
+}
+
+.analysis-running-page .header-left p {
+  font-size: 0.9rem;
+  color: var(--text-light);
+}
+
+.analysis-running-page .header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  min-width: 150px;
+}
+
+.analysis-running-page .progress-text {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.analysis-running-page .progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background-color: var(--border-color);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.analysis-running-page .progress-bar-fill {
+  height: 100%;
+  background-color: var(--primary);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* Stepper */
+.analysis-running-page .tracking-body {
+  padding: 2.5rem;
+}
+
+.analysis-running-page .stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+
+.analysis-running-page .stepper::before {
+  content: '';
+  position: absolute;
+  left: 17px; /* center of the 34px icon */
+  top: 17px;
+  bottom: 17px;
+  width: 1px;
+  background-color: var(--border-color);
+  z-index: 0;
+}
+
+.analysis-running-page .step {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  position: relative;
+  z-index: 1;
+  padding-bottom: 2rem;
+}
+
+.analysis-running-page .step:last-child {
+  padding-bottom: 0;
+}
+
+.analysis-running-page .step-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background-color: white; /* to hide the line behind it */
+  position: relative;
+}
+
+/* Step States */
+.analysis-running-page .step.success .step-icon-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: var(--success-bg);
+  color: var(--success-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analysis-running-page .step.active .step-icon-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: var(--active-bg);
+  color: var(--active-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Spinner Animation for Active Step */
+.analysis-running-page .spinner {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.analysis-running-page .step.pending .step-icon-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: var(--pending-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analysis-running-page .step.pending .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--pending-color);
+}
+
+.analysis-running-page .step-content {
+  padding-top: 0.35rem; /* align text with center of icon */
+}
+
+.analysis-running-page .step-title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.analysis-running-page .step.success .step-title { color: #000000; }
+.analysis-running-page .step.active .step-title { color: var(--primary); }
+.analysis-running-page .step.pending .step-title { color: var(--text-light); }
+
+.analysis-running-page .step-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-light);
+}
+
+.analysis-running-page .step.pending .step-subtitle {
+  color: var(--text-lighter);
+}
+
+/* Info Box */
+.analysis-running-page .info-box {
+  margin-top: 2rem;
+  background-color: #F8FAFC;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.analysis-running-page .info-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.analysis-running-page .info-text {
+  font-size: 0.8rem;
+  color: var(--primary);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* Footer Note */
+.analysis-running-page .footer-note {
+  margin-top: 2rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-lighter);
+}

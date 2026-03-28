@@ -63,6 +63,7 @@ def get_analysis_results(analysis_id: int, db: Session = Depends(get_db)):
 
     return {
         "company": {
+            "company_id": company.id,
             "company_name": company.company_name,
             "cin_number": company.cin_number,
             "gstin_number": company.gstin_number,

@@ -7,6 +7,12 @@ export type ActivityLogItem = {
   detail: string;
 };
 
+export type SessionStats = {
+  active_users: number;
+  active_usernames: string[];
+  server_time: string;
+};
+
 export type AdminUser = {
   id: number;
   username: string;
@@ -19,8 +25,8 @@ export async function fetchAdminLogs(): Promise<ActivityLogItem[]> {
   return data;
 }
 
-export async function fetchSessionStats(): Promise<{ active_users: number }> {
-  const { data } = await api.get<{ active_users: number }>('/admin/session-stats');
+export async function fetchSessionStats(): Promise<SessionStats> {
+  const { data } = await api.get<SessionStats>('/admin/session-stats');
   return data;
 }
 

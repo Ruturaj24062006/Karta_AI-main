@@ -19,10 +19,24 @@ from database import SessionLocal
 from models.company import Company
 from models.analysis import Analysis
 from models.ews import EWSSignal, EWSTrajectory
-import random
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _risk_level_to_score(level: str) -> float:
+    u = str(level or "").upper()
+    if u == "CRITICAL":
+        return 95.0
+    if u == "HIGH":
+        return 82.0
+    if u == "MEDIUM":
+        return 58.0
+    if u == "LOW":
+        return 24.0
+    if u == "GOOD":
+        return 12.0
+    return 30.0
 
 
 # ──────────────────────────────────────────────────────
@@ -58,10 +72,11 @@ def build_fast_payload(company_id: int) -> dict:
                     results_data = json.load(f)
 
         baseline_pd = float(analysis.probability_of_default) if analysis else 15.0
-        news_score  = float(analysis.news_risk_score) if analysis else 0.0
+        news_score = float(analysis.news_risk_score) if analysis else 0.0
 
         fraud_signals = fraud_data.get("signals", [])
-        news_signals  = results_data.get("news_signals", []) if isinstance(results_data, dict) else []
+        news_signals = results_data.get("news_signals", []) if isinstance(results_data, dict) else []
+        decision_trace = results_data.get("decision_trace", {}) if isinstance(results_data, dict) else {}
 
         # ── Build Signals (with small initial noise to show movement) ────────
         def _rl(score: float) -> str:
@@ -74,21 +89,112 @@ def build_fast_payload(company_id: int) -> dict:
         circ_sig = next((s for s in fraud_signals if s.get("signal_type") == "CIRCULAR_TRADING"), {})
         mca_sig  = next((s for s in fraud_signals if s.get("signal_type") == "MCA_DIRECTOR"),     {})
 
-        # Seed initial values with minor ambient noise (5-15) if clean
-        gst_score  = min(100, float(gst_sig.get("evidence_amount",  0)) / 1_000_000) if gst_sig.get("risk_level") not in ("GOOD", None) else 12.4
-        circ_score = 95.0 if circ_sig.get("risk_level") == "HIGH" else 8.2
-        mca_score  = 85.0 if mca_sig.get("risk_level")  == "HIGH" else 15.1
-        
-        # News score usually from analysis, or 22.0 base
-        n_score = news_score if news_score > 0 else 22.8
+        gst_raw = gst_sig.get("raw_data", {}) if isinstance(gst_sig, dict) else {}
+        gst_mismatch_pct = float(gst_raw.get("mismatch_percentage", 0.0) or 0.0)
+        gst_late = float(gst_raw.get("late_filings", 0.0) or 0.0)
+        gst_score = min(100.0, max(_risk_level_to_score(gst_sig.get("risk_level", "UNKNOWN")), gst_mismatch_pct * 1.8 + gst_late * 4.0))
+
+        circ_graph = circ_sig.get("graph_data", {}) if isinstance(circ_sig, dict) else {}
+        edge_count = len(circ_graph.get("edges", []) or []) if isinstance(circ_graph, dict) else 0
+        circ_score = min(100.0, max(_risk_level_to_score(circ_sig.get("risk_level", "UNKNOWN")), edge_count * 6.0))
+
+        mca_raw = mca_sig.get("raw_data", {}) if isinstance(mca_sig, dict) else {}
+        is_disqualified = bool(mca_raw.get("is_disqualified", False))
+        mca_score = min(100.0, max(_risk_level_to_score(mca_sig.get("risk_level", "UNKNOWN")), 88.0 if is_disqualified else 0.0))
+
+        if news_signals:
+            ns_vals = []
+            for n in news_signals:
+                if isinstance(n, dict):
+                    ns_vals.append(float(n.get("risk_impact_score") or n.get("risk_score") or 0.0))
+            if ns_vals:
+                news_score = sum(ns_vals) / len(ns_vals)
+            if news_score <= 0.0:
+                news_score = min(60.0, max(22.0, len(news_signals) * 10.0))
+        n_score = min(100.0, max(0.0, news_score))
+
+        if isinstance(decision_trace, dict):
+            emi_bounces = float(decision_trace.get("emi_bounce_count_12m") or decision_trace.get("emi_only_bounce_count_12m") or 0.0)
+            od_util = float(decision_trace.get("od_utilization_rate_percent") or decision_trace.get("od_avg_utilization_percent") or 0.0)
+        else:
+            emi_bounces = 0.0
+            od_util = 0.0
+        emi_score = min(100.0, max(emi_bounces * 18.0 + max(0.0, od_util - 50.0) * 0.9, 8.0 if emi_bounces == 0 and od_util > 0 else 0.0))
+        emi_proxy_used = False
+        if emi_score <= 0.0:
+            emi_proxy_used = True
+            emi_score = min(100.0, max(10.0, baseline_pd * 0.55))
+
+        litigation_hits = 0
+        for n in news_signals:
+            if not isinstance(n, dict):
+                continue
+            txt = f"{n.get('description', '')} {n.get('headline', '')}".lower()
+            if any(k in txt for k in ["court", "nclt", "drt", "litigation", "insolvency", "legal notice", "default"]):
+                litigation_hits += 1
+        court_score = min(100.0, litigation_hits * 20.0)
+        court_proxy_used = False
+        if court_score <= 0.0 and len(news_signals) > 0:
+            court_proxy_used = True
+            court_score = min(35.0, len(news_signals) * 2.5)
 
         signals = [
-            {"signal_name": "GST Filing Status",     "score": round(gst_score,  1), "risk_level": _rl(gst_score),  "detail": gst_sig.get("description",  "Clean GST filings confirmed; processing GSTR-3B trends."), "source": "GSTN API [Doc]",     "last_updated": datetime.now().isoformat()},
-            {"signal_name": "Bank / Circular Flow",  "score": round(circ_score, 1), "risk_level": _rl(circ_score), "detail": circ_sig.get("description", "No major circular trading detected in current batch."),    "source": "Bank Stmt [NLP]",    "last_updated": datetime.now().isoformat()},
-            {"signal_name": "Promoter Default Risk", "score": round(mca_score,  1), "risk_level": _rl(mca_score),  "detail": mca_sig.get("description",  "Director history active; checking cross-directorships."),   "source": "MCA21 Database",     "last_updated": datetime.now().isoformat()},
-            {"signal_name": "News Sentiment",        "score": round(n_score,    1), "risk_level": _rl(n_score),   "detail": f"Sentiment analysis active. Scanning regional and financial news portals.",       "source": "FinBERT + Scraper",  "last_updated": datetime.now().isoformat()},
-            {"signal_name": "EMI Repayment",         "score": 5.4,                  "risk_level": "GOOD",          "detail": "No overdue EMI; checking standard repayment variance.",                             "source": "Loan Ledger [DB]",   "last_updated": datetime.now().isoformat()},
-            {"signal_name": "Court / Litigation",    "score": 19.8,                 "risk_level": "GOOD",          "detail": "Scanning e-Courts and NCLT notices for name matches.",                             "source": "Google News RSS",    "last_updated": datetime.now().isoformat()},
+            {
+                "signal_name": "GST Filing Status",
+                "score": round(gst_score, 1),
+                "risk_level": _rl(gst_score),
+                "detail": gst_sig.get("description", f"GST mismatch {gst_mismatch_pct:.2f}% from analyzed filings."),
+                "source": "GSTN + Uploaded GST [LIVE]",
+                "last_updated": datetime.now().isoformat(),
+            },
+            {
+                "signal_name": "Bank / Circular Flow",
+                "score": round(circ_score, 1),
+                "risk_level": _rl(circ_score),
+                "detail": circ_sig.get("description", f"Transaction graph analyzed with {edge_count} routed edges."),
+                "source": "Bank Statements + Network Graph [LIVE]",
+                "last_updated": datetime.now().isoformat(),
+            },
+            {
+                "signal_name": "Promoter Default Risk",
+                "score": round(mca_score, 1),
+                "risk_level": _rl(mca_score),
+                "detail": mca_sig.get("description", "Promoter and director regulatory profile evaluated."),
+                "source": "MCA21 + CIBIL Linkage [LIVE]",
+                "last_updated": datetime.now().isoformat(),
+            },
+            {
+                "signal_name": "News Sentiment",
+                "score": round(n_score, 1),
+                "risk_level": _rl(n_score),
+                "detail": f"Sentiment risk from {len(news_signals)} captured news records.",
+                "source": "FinBERT + News Scraper [LIVE]",
+                "last_updated": datetime.now().isoformat(),
+            },
+            {
+                "signal_name": "EMI Repayment",
+                "score": round(emi_score, 1),
+                "risk_level": _rl(emi_score),
+                "detail": (
+                    f"EMI bounces: {int(emi_bounces)} | OD utilization: {round(od_util, 1)}%."
+                    if not emi_proxy_used
+                    else f"Direct EMI ledger markers unavailable; proxy derived from PD {baseline_pd:.1f}% and conduct trend."
+                ),
+                "source": "Loan Ledger + Banking Trace [LIVE]",
+                "last_updated": datetime.now().isoformat(),
+            },
+            {
+                "signal_name": "Court / Litigation",
+                "score": round(court_score, 1),
+                "risk_level": _rl(court_score),
+                "detail": (
+                    f"Litigation/news legal hits identified: {litigation_hits}."
+                    if not court_proxy_used
+                    else f"No explicit legal-keyword hit; legal watch index derived from {len(news_signals)} monitored news items."
+                ),
+                "source": "Google News Legal Scan [LIVE]",
+                "last_updated": datetime.now().isoformat(),
+            },
         ]
 
         overall = round(sum(s["score"] for s in signals) / len(signals), 1)
@@ -116,21 +222,34 @@ def build_fast_payload(company_id: int) -> dict:
                 for t in db_traj
             ]
         else:
-            import math
-            now = datetime.now()
-            trajectory = []
-            for i in range(5, -1, -1):
-                dt = now - timedelta(days=30 * i)
-                variance = math.sin((6 - i) * 0.8) * 3.5 + ((i % 2) * 1.5)
-                pd_pt = round(max(1.0, min(99.0, baseline_pd - i * 1.2 + variance)), 1)
-                if pd_pt >= alert_threshold:
-                    alert_triggered = True
-                trajectory.append({
-                    "month": dt.strftime("%b"),
-                    "year":  dt.strftime("%Y"),
-                    "probability_of_default": pd_pt,
-                    "is_predicted": (i == 0),
-                })
+            recent_analyses = (
+                db.query(Analysis)
+                .filter(Analysis.company_id == company_id)
+                .order_by(Analysis.created_at.asc())
+                .limit(6)
+                .all()
+            )
+            if recent_analyses:
+                trajectory = []
+                for idx, a in enumerate(recent_analyses):
+                    dt = a.created_at or datetime.now()
+                    pd_pt = round(float(a.probability_of_default or baseline_pd), 1)
+                    if pd_pt >= alert_threshold:
+                        alert_triggered = True
+                    trajectory.append({
+                        "month": dt.strftime("%b"),
+                        "year": dt.strftime("%Y"),
+                        "probability_of_default": pd_pt,
+                        "is_predicted": False,
+                    })
+            else:
+                now = datetime.now()
+                trajectory = [{
+                    "month": now.strftime("%b"),
+                    "year": now.strftime("%Y"),
+                    "probability_of_default": round(max(0.0, min(99.0, baseline_pd)), 1),
+                    "is_predicted": False,
+                }]
 
         alert_triggered = alert_triggered or any(
             t["probability_of_default"] >= alert_threshold for t in trajectory
@@ -154,18 +273,6 @@ def build_fast_payload(company_id: int) -> dict:
             }
             for a in db_alerts
         ]
-
-        # Synthetic alert if ML says high risk and no DB alert
-        if alert_triggered and not any(a["severity"] in ("HIGH", "CRITICAL") for a in alerts):
-            alerts.append({
-                "alert_id": 9001,
-                "severity": "CRITICAL" if baseline_pd > 40 else "HIGH",
-                "message": f"PD of {baseline_pd:.1f}% breached {alert_threshold}% threshold — immediate RM review required.",
-                "source": "XGBoost Credit Engine",
-                "timestamp": datetime.now().isoformat(),
-                "channels_used": ["SMS (Twilio)", "Email (SendGrid)"],
-                "acknowledged": False,
-            })
 
         return {
             "type": "ews_update",
@@ -228,13 +335,14 @@ def _enrich_with_live_apis(base_payload: dict) -> dict:
         court_detail = (
             f"{len(litigation_hits)} litigation mentions found. Latest: {litigation_hits[0][:80]}"
             if litigation_hits
-            else "No litigation articles found in Google News RSS."
+            else "No new litigation hits in this cycle; previous risk context retained."
         )
         # Update court signal
         for s in signals:
             if s["signal_name"] == "Court / Litigation":
-                s["score"] = round(court_score, 1)
-                s["risk_level"] = "CRITICAL" if court_score > 80 else "HIGH" if court_score > 60 else "MEDIUM" if court_score > 30 else "GOOD"
+                updated_score = max(float(s.get("score", 0.0)), court_score)
+                s["score"] = round(updated_score, 1)
+                s["risk_level"] = "CRITICAL" if updated_score > 80 else "HIGH" if updated_score > 60 else "MEDIUM" if updated_score > 30 else "GOOD"
                 s["detail"] = court_detail
                 s["source"] = "Google News RSS [LIVE]"
                 s["last_updated"] = datetime.now().isoformat()
@@ -242,27 +350,14 @@ def _enrich_with_live_apis(base_payload: dict) -> dict:
     except Exception as e:
         logger.warning(f"Live court signal failed: {e}")
 
-    # --- Add Random Jitter to all signals to make it look "Alive" ---
-    # This prevents the "always 31%" issue by adding +/- 0.8% drift
-    for s in signals:
-        drift = (random.random() - 0.5) * 1.6
-        s["score"] = round(max(0.0, min(100.0, s["score"] + drift)), 1)
-        # Update last updated to now
-        s["last_updated"] = datetime.now().isoformat()
-
-    # Apply drift to Current PD as well
-    pd_drift = (random.random() - 0.5) * 1.2
-    base_payload["trajectory"]["current_pd"] = round(max(1.0, min(99.0, base_payload["trajectory"]["current_pd"] + pd_drift)), 1)
-
     base_payload["signals"] = signals
     base_payload["data_source"] = "LIVE [APIs + DB]"
     base_payload["timestamp"] = datetime.now().isoformat()
 
     # Recalculate overall
     if signals:
-        raw_avg = sum(s["score"] for s in signals) / len(signals)
-        # Added a tiny drift to the overall score itself for extra "alive" feel
-        base_payload["summary"]["overall_ews_score"] = round(raw_avg + (random.random() - 0.5) * 0.5, 1)
+        raw_avg = sum(float(s.get("score", 0.0)) for s in signals) / len(signals)
+        base_payload["summary"]["overall_ews_score"] = round(raw_avg, 1)
     return base_payload
 
 

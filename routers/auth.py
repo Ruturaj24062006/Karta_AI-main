@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -95,7 +96,11 @@ def admin_logs(_: User = Depends(check_admin_role)):
 @router.get("/admin/session-stats")
 @router.get("/api/admin/session-stats")
 def session_stats(_: User = Depends(check_admin_role)):
-    return {"active_users": activity_log_service.get_active_users_count()}
+    return {
+        "active_users": activity_log_service.get_active_users_count(),
+        "active_usernames": activity_log_service.get_active_usernames(),
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.delete("/api/admin/users/{username}")

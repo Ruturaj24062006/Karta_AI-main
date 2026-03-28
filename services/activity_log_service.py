@@ -44,5 +44,9 @@ class ActivityLogService:
         with self._lock:
             return len([u for u, sessions in self._active_sessions.items() if sessions > 0])
 
+    def get_active_usernames(self) -> List[str]:
+        with self._lock:
+            return sorted([u for u, sessions in self._active_sessions.items() if sessions > 0])
+
 
 activity_log_service = ActivityLogService()

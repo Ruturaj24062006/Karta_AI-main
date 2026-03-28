@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { WS_API_URL } from '../services/apiConfig';
 import { getCAMPreview, generateCAM, downloadCAM } from '../services/camApi';
+import { getFullResults } from '../services/resultsApi';
 import { useApi, Skeleton, ErrorBanner } from '../services/useApi';
 import BackButton from '../components/BackButton';
 import './CamSuccess.css';
@@ -88,8 +89,10 @@ function Steps({ current }: { current: number }) {
 function CamSuccess() {
   const [searchParams] = useSearchParams();
   const analysisId = Number(searchParams.get('id') || '1');
+  const companyIdFromQuery = Number(searchParams.get('company_id') || '0');
 
   const { data: preview, loading, error, refetch } = useApi(() => getCAMPreview(analysisId), [analysisId]);
+  const { data: fullResults } = useApi(() => getFullResults(analysisId), [analysisId]);
 
   /* Step state: 0 = form, 1 = generating, 2 = done */
   const [step, setStep] = useState(0);
@@ -508,7 +511,7 @@ function CamSuccess() {
               {/* Next actions */}
               <div style={{ background: 'white', borderRadius: 16, border: '1px dashed #CBD5E1', padding: '20px' }}>
                 <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 700, marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Next Actions</div>
-                <Link to={`/warning-system?company_id=1&id=${analysisId}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, textDecoration: 'none', color: '#92400E', fontWeight: 600, marginBottom: 10, fontSize: '0.84rem' }}>
+                <Link to={`/warning-system?company_id=${Number((fullResults as any)?.company?.company_id || companyIdFromQuery || 0)}&id=${analysisId}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, textDecoration: 'none', color: '#92400E', fontWeight: 600, marginBottom: 10, fontSize: '0.84rem' }}>
                   <div style={{ background: '#FEF3C7', padding: 6, borderRadius: 8 }}><Bell size={14} color="#EA580C" /></div> Monitor via EWS
                 </Link>
                 <Link to="/new-analysis" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 10, textDecoration: 'none', color: '#0C4A6E', fontWeight: 600, fontSize: '0.84rem' }}>

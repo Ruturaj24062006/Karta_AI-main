@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BarChart3, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { ErrorBanner } from '../services/useApi';
+import api from '../services/apiConfig';
 import './Analytics.css';
 
 interface CompanyAnalytic {
@@ -11,6 +12,17 @@ interface CompanyAnalytic {
   analysis_date: string;
   risk_level: string;
   amount: number;
+}
+
+interface HistoryRecord {
+  analysis_id: number;
+  company_name: string;
+  cin_number?: string;
+  created_at: string;
+  status: string;
+  decision?: string;
+  fraud_risk_level?: string;
+  loan_amount_requested?: number;
 }
 
 interface AnalyticsStats {
@@ -35,30 +47,52 @@ function Analytics() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'approved' | 'rejected' | 'pending'>('all');
 
+  function normalizeStatus(historyStatus: string, decision?: string): 'approved' | 'rejected' | 'pending' {
+    const hs = String(historyStatus || '').toLowerCase();
+    const dec = String(decision || '').toUpperCase();
+
+    if (hs !== 'completed') return 'pending';
+    if (dec === 'REJECT') return 'rejected';
+    if (dec === 'APPROVE' || dec === 'CONDITIONAL') return 'approved';
+    return 'pending';
+  }
+
   const loadAnalytics = async () => {
     setError('');
-    setLoading(true);
+    if (stats.total_companies === 0) {
+      setLoading(true);
+    }
     try {
-      // Mock data - replace with actual API call
-      const mockStats: AnalyticsStats = {
-        total_companies: 156,
-        approved_companies: 118,
-        rejected_companies: 28,
-        pending_companies: 10,
-        approval_rate: 75.6,
-        recent_analyses: [
-          { id: 1, company_name: 'Tech Solutions India Ltd', cin_number: 'U29999MH2020PTC345678', status: 'approved', analysis_date: '2026-03-25', risk_level: 'LOW', amount: 50000000 },
-          { id: 2, company_name: 'Global Trade Corp', cin_number: 'U72999DL2019PTC456789', status: 'approved', analysis_date: '2026-03-24', risk_level: 'LOW', amount: 75000000 },
-          { id: 3, company_name: 'Finance Plus LLC', cin_number: 'U65999KA2021PTC567890', status: 'rejected', analysis_date: '2026-03-23', risk_level: 'HIGH', amount: 25000000 },
-          { id: 4, company_name: 'Smart Ventures Inc', cin_number: 'U80999GJ2018PTC678901', status: 'approved', analysis_date: '2026-03-22', risk_level: 'MEDIUM', amount: 100000000 },
-          { id: 5, company_name: 'Business Dynamics', cin_number: 'U45999TN2020PTC789012', status: 'rejected', analysis_date: '2026-03-21', risk_level: 'HIGH', amount: 30000000 },
-          { id: 6, company_name: 'Industrial Growth Ltd', cin_number: 'U91999MH2017PTC890123', status: 'approved', analysis_date: '2026-03-20', risk_level: 'LOW', amount: 120000000 },
-          { id: 7, company_name: 'Export Masters', cin_number: 'U48999AP2019PTC901234', status: 'pending', analysis_date: '2026-03-19', risk_level: 'MEDIUM', amount: 85000000 },
-        ],
-      };
-      setStats(mockStats);
+      const { data } = await api.get<HistoryRecord[]>('/api/history');
+      const records = (data || []).map((r) => {
+        const status = normalizeStatus(r.status, r.decision);
+        return {
+          id: r.analysis_id,
+          company_name: r.company_name || 'Unknown Company',
+          cin_number: r.cin_number || 'N/A',
+          status,
+          analysis_date: r.created_at || new Date().toISOString(),
+          risk_level: String(r.fraud_risk_level || 'MEDIUM').toUpperCase(),
+          amount: Number(r.loan_amount_requested || 0),
+        } as CompanyAnalytic;
+      });
+
+      const total = records.length;
+      const approved = records.filter((r) => r.status === 'approved').length;
+      const rejected = records.filter((r) => r.status === 'rejected').length;
+      const pending = records.filter((r) => r.status === 'pending').length;
+      const approvalRate = total > 0 ? (approved / total) * 100 : 0;
+
+      setStats({
+        total_companies: total,
+        approved_companies: approved,
+        rejected_companies: rejected,
+        pending_companies: pending,
+        approval_rate: approvalRate,
+        recent_analyses: records.slice(0, 100),
+      });
     } catch (err: any) {
-      setError(err?.message || 'Failed to load analytics data.');
+      setError(err?.userMessage || err?.message || 'Failed to load analytics data.');
     } finally {
       setLoading(false);
     }
@@ -66,6 +100,13 @@ function Analytics() {
 
   useEffect(() => {
     loadAnalytics();
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      loadAnalytics();
+    }, 15000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const filteredAnalyses = filter === 'all' 
@@ -109,7 +150,7 @@ function Analytics() {
           <BarChart3 size={32} className="analytics-icon" />
           <div>
             <h1>Company Analytics</h1>
-            <p>Approval and rejection statistics across all analyzed companies</p>
+            <p>Approval and rejection statistics across all analyzed companies · Live data every 15s</p>
           </div>
         </div>
         <button onClick={loadAnalytics} className="refresh-btn">
@@ -150,7 +191,7 @@ function Analytics() {
           <div className="stat-content">
             <div className="stat-label">Rejected</div>
             <div className="stat-value">{stats.rejected_companies}</div>
-            <div className="stat-detail">{((stats.rejected_companies / stats.total_companies) * 100).toFixed(1)}% rejection rate</div>
+            <div className="stat-detail">{(stats.total_companies > 0 ? (stats.rejected_companies / stats.total_companies) * 100 : 0).toFixed(1)}% rejection rate</div>
           </div>
         </div>
 
@@ -173,19 +214,19 @@ function Analytics() {
           <div className="chart-bar">
             <div 
               className="chart-bar-segment approved" 
-              style={{ width: `${(stats.approved_companies / stats.total_companies) * 100}%` }}
+              style={{ width: `${stats.total_companies > 0 ? (stats.approved_companies / stats.total_companies) * 100 : 0}%` }}
             >
               <span className="bar-label">{stats.approved_companies}</span>
             </div>
             <div 
               className="chart-bar-segment rejected" 
-              style={{ width: `${(stats.rejected_companies / stats.total_companies) * 100}%` }}
+              style={{ width: `${stats.total_companies > 0 ? (stats.rejected_companies / stats.total_companies) * 100 : 0}%` }}
             >
               <span className="bar-label">{stats.rejected_companies}</span>
             </div>
             <div 
               className="chart-bar-segment pending" 
-              style={{ width: `${(stats.pending_companies / stats.total_companies) * 100}%` }}
+              style={{ width: `${stats.total_companies > 0 ? (stats.pending_companies / stats.total_companies) * 100 : 0}%` }}
             >
               <span className="bar-label">{stats.pending_companies}</span>
             </div>

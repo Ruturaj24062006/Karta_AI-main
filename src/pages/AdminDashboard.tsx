@@ -2,23 +2,49 @@ import { useEffect, useMemo, useState } from 'react';
 import { getUsername } from '../services/auth';
 import { fetchAdminLogs, fetchSessionStats, type ActivityLogItem } from '../services/adminApi';
 import AdminPageHeader from '../components/AdminPageHeader';
+import api from '../services/apiConfig';
 
 function AdminDashboard() {
   const username = useMemo(() => getUsername(), []);
   const [logs, setLogs] = useState<ActivityLogItem[]>([]);
   const [activeUsers, setActiveUsers] = useState(0);
+  const [activeUsernames, setActiveUsernames] = useState<string[]>([]);
+  const [serverTime, setServerTime] = useState('');
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalAnalyses, setTotalAnalyses] = useState(0);
+  const [todayAnalyses, setTodayAnalyses] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [actionFilter, setActionFilter] = useState<'all' | 'login' | 'logout' | 'upload'>('all');
-  const [liveMode, setLiveMode] = useState(false);
+  const [liveMode, setLiveMode] = useState(true);
+
+  const displayNow = useMemo(() => {
+    if (!serverTime) return new Date().toLocaleString('en-IN');
+    return new Date(serverTime).toLocaleString('en-IN');
+  }, [serverTime]);
 
   const loadDashboardData = async () => {
     setError('');
     try {
-      const [auditLogs, sessionStats] = await Promise.all([fetchAdminLogs(), fetchSessionStats()]);
+      const [auditLogs, sessionStats, usersResp, historyResp] = await Promise.all([
+        fetchAdminLogs(),
+        fetchSessionStats(),
+        api.get('/api/admin/users'),
+        api.get('/api/history'),
+      ]);
+
+      const historyRows: any[] = Array.isArray(historyResp.data) ? historyResp.data : [];
+      const todayDate = new Date().toISOString().slice(0, 10);
+      const todays = historyRows.filter((row) => String(row?.created_at || '').slice(0, 10) === todayDate).length;
+
       setLogs(auditLogs);
       setActiveUsers(sessionStats.active_users);
+      setActiveUsernames(sessionStats.active_usernames || []);
+      setServerTime(sessionStats.server_time || '');
+      setTotalUsers(Array.isArray(usersResp.data) ? usersResp.data.length : 0);
+      setTotalAnalyses(historyRows.length);
+      setTodayAnalyses(todays);
     } catch (err: any) {
       setError(err?.userMessage || err?.response?.data?.detail || 'Failed to load admin activity data.');
     } finally {
@@ -35,7 +61,7 @@ function AdminDashboard() {
 
     const timer = setInterval(() => {
       loadDashboardData();
-    }, 10000);
+    }, 5000);
 
     return () => clearInterval(timer);
   }, [liveMode]);
@@ -70,17 +96,32 @@ function AdminDashboard() {
               <div className="mt-2 text-slate-800 font-bold">Role controls enabled</div>
             </a>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-white hover:shadow transition">
-              <div className="text-sm text-slate-500">System Health</div>
-              <div className="mt-2 text-slate-800 font-bold">Auth APIs online</div>
+              <div className="text-sm text-slate-500">Total Registered Users</div>
+              <div className="mt-2 text-slate-800 font-bold text-2xl">{totalUsers}</div>
+              <div className="text-xs text-slate-500 mt-1">live from user database</div>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-white hover:shadow transition">
-              <div className="text-sm text-slate-500">Audit Scope</div>
-              <div className="mt-2 text-slate-800 font-bold">Session tracking active</div>
+              <div className="text-sm text-slate-500">Server Time</div>
+              <div className="mt-2 text-slate-800 font-bold">{displayNow}</div>
+              <div className="text-xs text-slate-500 mt-1">synced from backend clock</div>
             </div>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 hover:shadow transition">
               <div className="text-sm text-emerald-700">Session Tracking</div>
               <div className="mt-2 text-emerald-900 font-extrabold text-2xl">{activeUsers}</div>
               <div className="text-xs text-emerald-700 mt-1">currently active users</div>
+              <div className="text-xs text-emerald-800 mt-2">
+                {activeUsernames.length > 0 ? activeUsernames.join(', ') : 'No active usernames'}
+              </div>
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 hover:shadow transition">
+              <div className="text-sm text-blue-700">Analysis Volume</div>
+              <div className="mt-2 text-blue-900 font-extrabold text-2xl">{totalAnalyses}</div>
+              <div className="text-xs text-blue-700 mt-1">total analyses completed/created</div>
+            </div>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 hover:shadow transition">
+              <div className="text-sm text-indigo-700">Today Analyses</div>
+              <div className="mt-2 text-indigo-900 font-extrabold text-2xl">{todayAnalyses}</div>
+              <div className="text-xs text-indigo-700 mt-1">records created today</div>
             </div>
           </div>
 

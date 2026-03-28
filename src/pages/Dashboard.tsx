@@ -494,7 +494,7 @@ function Dashboard() {
           <Link to={`/fraud-report?id=${analysisId}`} className="btn-action btn-fraud" style={{ textDecoration: 'none' }}>
             <Network size={20} /> View Fraud Graph
           </Link>
-          <Link to={`/warning-system?company_id=${data.company.cin_number ? '1' : '1'}&id=${analysisId}`} className="btn-action" style={{ textDecoration: 'none', background: '#1C335B', color: 'white', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 8 }}>
+          <Link to={`/warning-system?company_id=${Number(data.company.company_id || 0)}&id=${analysisId}`} className="btn-action" style={{ textDecoration: 'none', background: '#1C335B', color: 'white', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 8 }}>
             <AlertTriangle size={20} /> EWS Monitor
           </Link>
           <button

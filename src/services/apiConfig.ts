@@ -4,7 +4,7 @@
  * Base URL reads from env VITE_API_URL.
  */
 import axios from 'axios';
-import { getAuthToken } from './auth';
+import { clearAuthSession, getAuthToken } from './auth';
 
 export const BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`;
 export const WS_API_URL = BASE_URL.replace(/^http/i, 'ws');
@@ -49,13 +49,32 @@ api.interceptors.response.use(
     const status = hasResponse ? error.response?.status : null;
     const detail = error.response?.data?.detail || error.message || 'Unknown server error';
     const url     = error.config?.url || '';
+    const isStatusPoll = String(url).includes('/api/status/');
 
-    console.error(`[KARTA API ERROR] ${url} → ${status ?? 'NETWORK'}: ${detail}`);
+    if (isStatusPoll && !hasResponse && isTimeout) {
+      console.warn(`[KARTA API WARN] ${url} → ${status ?? 'NETWORK'}: ${detail}`);
+    } else {
+      console.error(`[KARTA API ERROR] ${url} → ${status ?? 'NETWORK'}: ${detail}`);
+    }
+
+    if (hasResponse && status === 401) {
+      const isLoginRequest = String(url).includes('/login');
+      if (!isLoginRequest) {
+        clearAuthSession();
+        if (window.location.pathname !== '/login') {
+          window.location.assign('/login');
+        }
+      }
+      error.userMessage = 'Session expired or invalid. Please log in again.';
+      return Promise.reject(error);
+    }
 
     // Enrich error so UI components can read .userMessage directly
     if (!hasResponse) {
       error.userMessage = isTimeout
-        ? `Request timed out after ${Math.round((error.config?.timeout || 0) / 1000)}s for ${url || 'this endpoint'}. Backend may still be processing. Please retry in a few moments.`
+        ? isStatusPoll
+          ? 'Status check timed out while analysis is processing. Retrying automatically.'
+          : `Request timed out after ${Math.round((error.config?.timeout || 0) / 1000)}s for ${url || 'this endpoint'}. Backend may still be processing. Please retry in a few moments.`
         : `Network error: backend is unreachable at ${BASE_URL}. Start FastAPI server on port 8000 and retry.`;
     } else {
       error.userMessage =

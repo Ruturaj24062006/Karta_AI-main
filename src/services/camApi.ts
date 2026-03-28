@@ -46,7 +46,7 @@ export async function getCAMPreview(analysisId: number): Promise<CAMPreview> {
  * format: 'word' | 'pdf'
  */
 export function downloadCAM(analysisId: number, format: 'word' | 'pdf'): void {
-  const url = `${BASE_URL}/api/cam/download/${analysisId}?format=${format}`;
+  const url = `/api/cam/download/${analysisId}?format=${format}`;
   const a = document.createElement('a');
   a.href = url;
   a.target = '_blank';
@@ -57,18 +57,14 @@ export function downloadCAM(analysisId: number, format: 'word' | 'pdf'): void {
 }
 
 export async function downloadCAMReport(taskId: number): Promise<void> {
-  const res = await api.get(`/reports/download/${taskId}`, {
-    responseType: 'blob',
-    timeout: 120_000,
-  });
-
-  const blob = new Blob([res.data], { type: 'application/pdf' });
-  const tempUrl = window.URL.createObjectURL(blob);
+  // Use native browser navigation instead of XHR to avoid CORS restrictions on download responses.
+  const directUrl = `${BASE_URL}/api/reports/download/${taskId}`;
   const a = document.createElement('a');
-  a.href = tempUrl;
+  a.href = directUrl;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
   a.download = 'KARTA_CAM_Report.pdf';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  window.URL.revokeObjectURL(tempUrl);
 }

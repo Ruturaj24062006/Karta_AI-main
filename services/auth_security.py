@@ -29,9 +29,9 @@ def _jwt_algorithm() -> str:
 
 def _jwt_expiry_minutes() -> int:
     try:
-        return int(config.JWT_EXPIRE_MINUTES or 60)
+        return int(config.JWT_EXPIRE_MINUTES or 480)
     except Exception:
-        return 60
+        return 480
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:

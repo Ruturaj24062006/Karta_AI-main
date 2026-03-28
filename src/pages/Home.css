@@ -141,11 +141,10 @@
 }
 
 .home-page .navbar .container {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  justify-content: initial;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  column-gap: 1rem;
+  gap: 1rem;
 }
 
 .home-page .nav-left {
@@ -164,7 +163,7 @@
   align-items: center;
   gap: 0.75rem;
   letter-spacing: -0.02em;
-  justify-self: center;
+  justify-self: start;
 }
 
 .home-page .logo-icon-wrapper {
@@ -598,11 +597,11 @@
 /* Responsive */
 @media (max-width: 768px) {
   .home-page .navbar .container {
-    grid-template-columns: auto 1fr auto;
+    display: flex;
+    justify-content: space-between;
   }
 
   .home-page .logo {
-    justify-self: start;
     margin-left: 0.5rem;
   }
 

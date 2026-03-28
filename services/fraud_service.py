@@ -298,91 +298,19 @@ def _get_seeded_random(seed_str: str) -> random.Random:
     seed_int = int(hashlib.md5(seed_str.encode()).hexdigest(), 16)
     return random.Random(seed_int)
 
-
-def _build_forced_circular_loop(target_gstin: str, generator: random.Random) -> Dict[str, Any]:
-    loop_count = generator.randint(5, 7)
-    shell_nodes = [f"Shell_{generator.randint(100, 999)}" for _ in range(loop_count)]
-    rotated_base = float(generator.randint(75000, 190000))
-
-    nodes_data = [{"id": target_gstin, "label": target_gstin, "color": "#1C335B"}]
-    nodes_data.extend({"id": n, "label": n, "color": "#FF0000"} for n in shell_nodes)
-
-    edges_data = []
-    cycle_chain = [target_gstin] + shell_nodes + [target_gstin]
-    total_rotated = 0.0
-    for i in range(len(cycle_chain) - 1):
-        amt = round(rotated_base + generator.uniform(-5000, 5000), 2)
-        total_rotated += amt
-        edges_data.append({
-            "from": cycle_chain[i],
-            "to": cycle_chain[i + 1],
-            "label": f"₹{amt:,.0f}",
-        })
-
-    return {
-        "signal_type": "CIRCULAR_TRADING",
-        "risk_level": "HIGH",
-        "description": (
-            f"Circular trading topology confirmed: {loop_count} shell entities rotating small-value invoices "
-            f"in a closed loop. Total observed rotated capital ₹{total_rotated:,.2f}."
-        ),
-        "evidence_amount": float(total_rotated),
-        "confidence_score": 99.0,
-        "source": "NetworkX Graph Cycle Detection",
-        "graph_data": {
-            "nodes": nodes_data,
-            "edges": edges_data,
-        },
-    }
-
 # MAIN EXPORT: The master aggregation function called by 'routers/analyze.py'
 def run_fraud_detection(gstin: str, cin: str, dins: List[str] = None, gst_data: List[Dict] = None, trx_data: List[Dict] = None, ocr_revenue: float = 50000000.0) -> Dict[str, Any]:
     """
-    Executes the 3 Real Sub-systems synchronously.
-    If physical tables/APIs are bypassed, procedurally generates highly realistic 
-    structural fraud footprints deterministically based on the company's GSTIN/CIN.
+    Executes the 3 fraud sub-systems synchronously using real available inputs.
+    Circular-trading detection is strictly based on uploaded/API transaction data.
     """
     generator = _get_seeded_random(gstin + cin)
-    
-    # Procedural generation mapped to realistic sector constraints
-    scaled_variance = ocr_revenue * 0.12 # 12% working capital variance logic
-    
-    # 1. Procedural GST Synthesis (if missing/failed)
-    if not gst_data:
-        gst_data = []
-        months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        monthly_base = ocr_revenue / 12.0
-        for m in months:
-            g2a = monthly_base + generator.uniform(-scaled_variance, scaled_variance)
-            # Create a mismatch randomly weighted
-            g3b = g2a + generator.uniform(-scaled_variance*0.5, scaled_variance*2.0)
-            gst_data.append({"month": m, "gstr_2a": g2a, "gstr_3b": g3b, "filed_on_time": generator.random() > 0.15})
-            
-    signal_1_gst = analyze_gst_mismatches(gstin, gst_data)
-    
-    # 2. Procedural Transaction Graph Synthesis (if missing)
-    if not trx_data:
-        trx_data = []
-        nodes = [f"Vendor_0x{generator.randint(1000, 9999)}" for _ in range(8)]
-        # Connect to target
-        for n in nodes:
-            trx_data.append({"from_node": gstin, "to_node": n, "amount": generator.uniform(100000, scaled_variance)})
-            trx_data.append({"from_node": n, "to_node": gstin, "amount": generator.uniform(50000, scaled_variance*0.8)})
-            
-        # Synthesize a realistic 3-hop circular loop to trigger NetworkX algorithms
-        if generator.random() > 0.5:
-            loop_amt = float(generator.randint(800000, 2500000))
-            n1 = f"Shell_Company_{generator.randint(10, 99)}"
-            n2 = f"Logistics_Corp_0x{generator.randint(10, 99)}"
-            trx_data.append({"from_node": gstin, "to_node": n1, "amount": loop_amt})
-            trx_data.append({"from_node": n1, "to_node": n2, "amount": loop_amt})
-            trx_data.append({"from_node": n2, "to_node": gstin, "amount": loop_amt}) # Exact loop
-            
-    signal_2_circ = detect_circular_trading(gstin, trx_data)
 
-    gst_mismatch_pct = float((signal_1_gst.get("raw_data") or {}).get("mismatch_percentage", 0.0) or 0.0)
-    if gst_mismatch_pct > 120.0:
-        signal_2_circ = _build_forced_circular_loop(gstin, generator)
+    # 1. GST mismatch: use uploaded GST records when available; otherwise query source APIs.
+    signal_1_gst = analyze_gst_mismatches(gstin, gst_data if gst_data else None)
+
+    # 2. Circular trading: only real transaction ledgers should drive topology.
+    signal_2_circ = detect_circular_trading(gstin, trx_data if trx_data else None)
     
     # 3. Procedural MCA Director Cross-Entity review (if missing/failed)
     if not dins:

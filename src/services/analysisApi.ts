@@ -27,7 +27,10 @@ export async function triggerAnalysis(analysisId: number): Promise<void> {
 
 /** One-shot status check */
 export async function getAnalysisStatus(analysisId: number): Promise<AnalysisStatus> {
-  const res = await api.get<AnalysisStatus>(`/api/status/${analysisId}`);
+  const res = await api.get<AnalysisStatus>(`/api/status/${analysisId}`, {
+    // Keep status polling responsive and fail fast when backend is temporarily busy.
+    timeout: 8000,
+  });
   return res.data;
 }
 

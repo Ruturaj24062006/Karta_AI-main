@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, AlertTriangle, CheckCircle2, Maximize2, X, ShieldAlert, Fingerprint, Database } from 'lucide-react';
 import { getFraudResults } from '../services/fraudApi';
@@ -12,8 +12,17 @@ function FraudReport() {
   const analysisId = Number(searchParams.get('id') || '1');
   
   const [graphModalOpen, setGraphModalOpen] = useState(false);
+  const [liveMode, setLiveMode] = useState(true);
 
   const { data, loading, error, refetch } = useApi(() => getFraudResults(analysisId), [analysisId]);
+
+  useEffect(() => {
+    if (!liveMode) return;
+    const timer = window.setInterval(() => {
+      refetch();
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [liveMode, refetch]);
 
   function crore(n: number) { return (n / 10000000).toFixed(1); }
 
@@ -34,6 +43,10 @@ function FraudReport() {
   );
 
   const { gst_detector: gst, circular_trading: ct, mca_xray: mca, overall_verdict: verdict } = data;
+  const monitoringMeta = (data as any)?.monitoring_meta || {};
+  const lastUpdatedLabel = monitoringMeta?.last_updated
+    ? new Date(String(monitoringMeta.last_updated)).toLocaleString('en-IN')
+    : 'Not available';
 
   const BHARAT_GSTIN = '24AABCB1234M1ZX';
   const isBharatPrecisionCase = Boolean(
@@ -240,10 +253,25 @@ function FraudReport() {
                         <CheckCircle2 size={18} /> No cyclic fund flows detected across the transactional graph.
                     </div>
                 )}
+              <div style={{ marginTop: 10, fontSize: '0.78rem', color: '#64748B', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span>
+                  Data source: <strong>{monitoringMeta?.data_source || 'uploaded_documents_and_linked_apis'}</strong>
+                </span>
+                <span>Last updated: <strong>{lastUpdatedLabel}</strong></span>
+              </div>
             </div>
-            <button onClick={() => setGraphModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', padding: '10px 16px', background: '#2563EB', color: 'white', border: 'none', borderRadius: 12, cursor: 'pointer', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}>
-                <Maximize2 size={16} /> Interactive View
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+              <button
+                onClick={() => setLiveMode((v) => !v)}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem', padding: '7px 12px', background: liveMode ? '#ECFDF5' : '#F8FAFC', color: liveMode ? '#166534' : '#334155', border: `1px solid ${liveMode ? '#86EFAC' : '#CBD5E1'}`, borderRadius: 999, cursor: 'pointer', fontWeight: 700 }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: liveMode ? '#22C55E' : '#94A3B8' }} />
+                {liveMode ? 'LIVE: ON' : 'LIVE: OFF'}
+              </button>
+              <button onClick={() => setGraphModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', padding: '10px 16px', background: '#2563EB', color: 'white', border: 'none', borderRadius: 12, cursor: 'pointer', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}>
+                  <Maximize2 size={16} /> Interactive View
+              </button>
+            </div>
           </div>
           
           <FraudGraph graphData={displayCt.graph_data} height={400} />

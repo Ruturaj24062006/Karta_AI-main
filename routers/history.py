@@ -22,6 +22,8 @@ def get_analysis_history(db: Session = Depends(get_db)):
         formatted_history.append({
             "analysis_id": analysis.id,
             "company_name": company.company_name,
+            "cin_number": company.cin_number,
+            "loan_amount_requested": company.loan_amount_requested,
             "created_at": analysis.created_at.isoformat() if analysis.created_at else "",
             "status": analysis.analysis_status,
             "failure_reason": analysis.failure_reason,

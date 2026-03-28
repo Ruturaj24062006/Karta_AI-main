@@ -16,6 +16,7 @@ export interface RiskSignalItem {
 
 export interface FullResults {
   company: {
+    company_id?: number;
     company_name: string;
     cin_number: string;
     gstin_number: string;

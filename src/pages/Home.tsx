@@ -6,17 +6,7 @@ function Home() {
   return (
     <div className="home-page">
       <nav className="navbar">
-        <div className="container flex items-center justify-between">
-          <div className="nav-left">
-            <div className="nav-links">
-              <Link to="/history">History</Link>
-              <a href="#">Product</a>
-              <a href="#">Features</a>
-              <a href="#">Research</a>
-              <a href="#">Pricing</a>
-            </div>
-          </div>
-
+        <div className="container">
           <Link to="/" className="logo">
             <div className="logo-icon-wrapper">
               <Zap size={24} fill="currentColor" stroke="none" />
@@ -43,7 +33,7 @@ function Home() {
 
           <p>
             KARTA reads every document, detects every fraud, explains every decision and
-            writes the full Credit Appraisal Memo — automatically in 2 hours.
+            writes the full Credit Appraisal Memo — automatically in a few minutes.
           </p>
 
           <div className="hero-actions">
@@ -65,7 +55,7 @@ function Home() {
 
               <div className="hero-insight-card hero-insight-card-primary">
                 <div className="hero-insight-label">CAM TURNAROUND</div>
-                <div className="hero-insight-value">2 Hours</div>
+                <div className="hero-insight-value">Few Minutes</div>
                 <p>From document upload to decision memo generation with full rationale trace.</p>
               </div>
 
@@ -90,7 +80,7 @@ function Home() {
               <div className="stat-icon">
                 <Zap size={24} strokeWidth={2.5} />
               </div>
-              <h3>2 Hours</h3>
+              <h3>Few Minutes</h3>
               <p>CAM Generation vs.<br />5 Days Manual</p>
             </div>
 
@@ -108,19 +98,6 @@ function Home() {
               </div>
               <h3>20%+</h3>
               <p>Better Default<br />Prediction via RAG</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="powered-by">
-          <div className="container">
-            <div className="powered-title">POWERED BY</div>
-            <div className="logos">
-              <div className="logo-item italic" style={{ fontWeight: 800 }}>PdfTable</div>
-              <div className="logo-item">XGBoost</div>
-              <div className="logo-item" style={{ fontWeight: 800 }}>SHAP</div>
-              <div className="logo-item">LangChain</div>
-              <div className="logo-item" style={{ fontWeight: 800 }}>FinBERT</div>
             </div>
           </div>
         </section>

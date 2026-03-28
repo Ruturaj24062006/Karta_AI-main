@@ -26,7 +26,7 @@ function ProtectedLayout() {
     </div>
   );
 }
-
+  
 /* 
   All inter-page navigation uses URL query params to carry the analysis ID:
   /analysis?id=2

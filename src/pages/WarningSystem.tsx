@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { WS_API_URL } from '../services/apiConfig';
 import { acknowledgeAlert } from '../services/ewsApi';
+import { getFullResults } from '../services/resultsApi';
 import BackButton from '../components/BackButton';
 import './WarningSystem.css';
 
@@ -98,8 +99,9 @@ function Countdown({ seconds = 30 }: { seconds?: number }) {
 /* ── Main Component ────────────────────────────────────── */
 function WarningSystem() {
   const [searchParams] = useSearchParams();
-  const companyId = Number(searchParams.get('company_id') || '1');
-  const analysisId = searchParams.get('id') || '1';
+  const companyIdFromQuery = Number(searchParams.get('company_id') || '0');
+  const analysisId = Number(searchParams.get('id') || '1');
+  const [resolvedCompanyId, setResolvedCompanyId] = useState<number>(companyIdFromQuery > 0 ? companyIdFromQuery : 0);
 
   const [data, setData] = useState<any>(null);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'live' | 'disconnected'>('connecting');
@@ -115,10 +117,31 @@ function WarningSystem() {
 
   const WS_BASE = WS_API_URL;
 
+  useEffect(() => {
+    let isMounted = true;
+    if (companyIdFromQuery > 0) {
+      setResolvedCompanyId(companyIdFromQuery);
+      return;
+    }
+
+    (async () => {
+      try {
+        const full = await getFullResults(analysisId);
+        const cid = Number((full as any)?.company?.company_id || 0);
+        if (isMounted && cid > 0) setResolvedCompanyId(cid);
+      } catch {
+        // keep default until user provides company_id explicitly
+      }
+    })();
+
+    return () => { isMounted = false; };
+  }, [companyIdFromQuery, analysisId]);
+
   const connect = useCallback(() => {
+    if (resolvedCompanyId <= 0) return;
     if (reconnTimer.current) clearTimeout(reconnTimer.current);
     setWsStatus('connecting');
-    const ws = new WebSocket(`${WS_BASE}/ws/ews/${companyId}`);
+    const ws = new WebSocket(`${WS_BASE}/ws/ews/${resolvedCompanyId}`);
     wsRef.current = ws;
 
     ws.onopen = () => setWsStatus('live');
@@ -155,7 +178,7 @@ function WarningSystem() {
       reconnTimer.current = setTimeout(connect, 5000);
     };
     ws.onerror = () => ws.close();
-  }, [companyId, WS_BASE]);
+  }, [resolvedCompanyId, WS_BASE]);
 
   useEffect(() => {
     connect();
@@ -174,56 +197,58 @@ function WarningSystem() {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', gap: 20 }}>
       <div style={{ width: 52, height: 52, border: '4px solid #E2E8F0', borderTopColor: '#6366F1', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
       <div style={{ fontWeight: 700, color: '#475569', fontSize: '1.1rem' }}>Connecting to EWS Live Feed…</div>
-      <div style={{ fontSize: '0.82rem', color: '#94A3B8' }}>{`${WS_BASE}/ws/ews/${companyId}`}</div>
+      <div style={{ fontSize: '0.82rem', color: '#94A3B8' }}>{resolvedCompanyId > 0 ? `${WS_BASE}/ws/ews/${resolvedCompanyId}` : 'Resolving company mapping from analysis...'}</div>
     </div>
   );
 
   const { company_info: ci, trajectory: traj, signals, alerts_sent, summary } = data;
 
-  const isXyzStableView = true;
+  const displayCi = ci || {};
+  const displaySummary = summary || {};
+  const displayTraj = {
+    ...(traj || {}),
+    alert_threshold: Number(traj?.alert_threshold ?? 25),
+    current_pd: Number(traj?.current_pd ?? 0),
+    data_points: Array.isArray(traj?.data_points) ? traj.data_points : [],
+    alert_triggered: Boolean(traj?.alert_triggered),
+  };
+  const displayAlerts = Array.isArray(alerts_sent) ? alerts_sent : [];
+  const displaySignals = Array.isArray(signals) ? signals : [];
 
-  const displayCi = isXyzStableView
-    ? {
-        ...ci,
-        company_name: 'XYZ Manufacturing Ltd',
-        loan_amount_disbursed: 150000000,
-      }
-    : ci;
+  const maxPd = Math.max(
+    ...displayTraj.data_points.map((d: any) => Number(d?.probability_of_default || 0)),
+    displayTraj.alert_threshold + 6,
+  );
 
-  const displaySummary = isXyzStableView
-    ? {
-        ...summary,
-        overall_ews_score: 68,
-        risk_trend: 'STABLE',
-        recommended_action: 'Continue routine monitoring. No escalation required at this stage.',
-      }
-    : summary;
+  const fraudSignalScores = displaySignals
+    .filter((sig: any) => {
+      const n = String(sig?.signal_name || '').toLowerCase();
+      return n.includes('fraud') || n.includes('circular') || n.includes('gst') || n.includes('default') || n.includes('emi');
+    })
+    .map((sig: any) => Number(sig?.score || 0));
+  const fraudRiskScore = fraudSignalScores.length > 0
+    ? Math.max(...fraudSignalScores)
+    : Number(displaySummary.overall_ews_score || 0);
+  const fraudRiskLevel = fraudRiskScore > 80
+    ? 'CRITICAL'
+    : fraudRiskScore >= 60
+      ? 'HIGH'
+      : fraudRiskScore >= 30
+        ? 'MEDIUM'
+        : 'LOW';
 
-  const displayTraj = isXyzStableView
-    ? {
-        ...traj,
-        current_pd: 14.2,
-        alert_threshold: 25,
-        alert_triggered: false,
-        alert_trigger_month: null,
-        data_points: [
-          { month: 'Oct', probability_of_default: 18, is_predicted: false },
-          { month: 'Nov', probability_of_default: 16.5, is_predicted: false },
-          { month: 'Dec', probability_of_default: 15.2, is_predicted: false },
-          { month: 'Jan', probability_of_default: 14.8, is_predicted: false },
-          { month: 'Feb', probability_of_default: 14.5, is_predicted: false },
-          { month: 'Mar', probability_of_default: 14.2, is_predicted: true },
-        ],
-      }
-    : traj;
+  const populatedSignals = displaySignals.filter((sig: any) =>
+    Boolean(String(sig?.source || '').trim()) && Boolean(String(sig?.detail || '').trim()),
+  ).length;
+  const dataQualityScore = displaySignals.length > 0
+    ? Math.round((populatedSignals / displaySignals.length) * 100)
+    : 0;
 
-  const displayAlerts = isXyzStableView
-    ? []
-    : alerts_sent.filter((a: any) => !String(a.message || '').toLowerCase().includes('new case filed'));
-
-  const displaySignals = isXyzStableView ? signals : signals;
-
-  const maxPd = Math.max(...displayTraj.data_points.map((d: any) => d.probability_of_default), (displayTraj.alert_threshold || 25) + 6);
+  const newsRiskSignal = displaySignals.find((sig: any) =>
+    String(sig?.signal_name || '').toLowerCase().includes('news'),
+  );
+  const newsRiskScore = Number(newsRiskSignal?.score || 0);
+  const newsSentimentScore = Math.max(0, Math.min(100, 100 - newsRiskScore));
 
   return (
     <div className="warning-page" style={{
@@ -270,7 +295,9 @@ function WarningSystem() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderLeft: '1px solid #E2E8F0', paddingLeft: 20 }}>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A' }}>RM Dashboard</div>
-              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748B' }}>{ci.relationship_manager_name}</div>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748B' }}>
+                {displayCi.relationship_manager_name || 'RM'}
+              </div>
             </div>
             <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,#1E293B,#334155)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '0.85rem' }}>RM</div>
           </div>
@@ -286,7 +313,7 @@ function WarningSystem() {
             <h1 style={{ fontSize: '2.25rem', fontWeight: 800, letterSpacing: '-0.04em', margin: 0 }}>Early Warning System</h1>
             <div className="warning-subtitle">
               <strong>{displayCi.company_name}</strong> · Real-Time WebSocket · Exposure: ₹{(displayCi.loan_amount_disbursed / 10_000_000).toFixed(1)} Cr
-              <span style={{ marginLeft: 14, opacity: 0.6 }}>· Since {displayCi.disbursement_date}</span>
+              <span style={{ marginLeft: 14, opacity: 0.6 }}>· Since {displayCi.disbursement_date || 'N/A'}</span>
             </div>
           </div>
           <div style={{
@@ -339,7 +366,12 @@ function WarningSystem() {
                 }} />
                 <YAxis domain={[0, Math.max(maxPd, 30)]} tick={{ fontSize: 12 }} tickFormatter={(v) => `${Number(v).toFixed(0)}%`} />
                 <Tooltip formatter={(value: any) => [`${Number(value).toFixed(1)}%`, 'PD']} />
-                <ReferenceLine y={25} stroke="#EF4444" strokeDasharray="6 4" label={{ value: 'THRESHOLD 25%', fill: '#EF4444', fontSize: 11, position: 'insideTopRight' }} />
+                <ReferenceLine
+                  y={displayTraj.alert_threshold}
+                  stroke="#EF4444"
+                  strokeDasharray="6 4"
+                  label={{ value: `THRESHOLD ${displayTraj.alert_threshold}%`, fill: '#EF4444', fontSize: 11, position: 'insideTopRight' }}
+                />
                 <Bar dataKey="probability_of_default" radius={[6, 6, 0, 0]} fill="#10B981" />
               </BarChart>
             </ResponsiveContainer>
@@ -409,17 +441,17 @@ function WarningSystem() {
             Secondary Signals
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
-            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, padding: '0.9rem 1rem' }}>
-              <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 800, letterSpacing: '0.04em' }}>FRAUD RISK</div>
-              <div style={{ marginTop: 4, fontSize: '1.25rem', color: '#15803D', fontWeight: 800 }}>LOW</div>
+            <div style={{ background: fraudRiskScore >= 60 ? '#FEF2F2' : '#F0FDF4', border: `1px solid ${fraudRiskScore >= 60 ? '#FECACA' : '#BBF7D0'}`, borderRadius: 12, padding: '0.9rem 1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: fraudRiskScore >= 60 ? '#991B1B' : '#166534', fontWeight: 800, letterSpacing: '0.04em' }}>FRAUD RISK</div>
+              <div style={{ marginTop: 4, fontSize: '1.25rem', color: fraudRiskScore >= 60 ? '#B91C1C' : '#15803D', fontWeight: 800 }}>{fraudRiskLevel}</div>
             </div>
-            <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, padding: '0.9rem 1rem' }}>
+            <div style={{ background: dataQualityScore >= 70 ? '#EFF6FF' : '#FFFBEB', border: `1px solid ${dataQualityScore >= 70 ? '#BFDBFE' : '#FDE68A'}`, borderRadius: 12, padding: '0.9rem 1rem' }}>
               <div style={{ fontSize: '0.72rem', color: '#1E40AF', fontWeight: 800, letterSpacing: '0.04em' }}>DATA QUALITY</div>
-              <div style={{ marginTop: 4, fontSize: '1.25rem', color: '#1D4ED8', fontWeight: 800 }}>90/100</div>
+              <div style={{ marginTop: 4, fontSize: '1.25rem', color: '#1D4ED8', fontWeight: 800 }}>{dataQualityScore}/100</div>
             </div>
-            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, padding: '0.9rem 1rem' }}>
+            <div style={{ background: newsSentimentScore >= 60 ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${newsSentimentScore >= 60 ? '#BBF7D0' : '#FECACA'}`, borderRadius: 12, padding: '0.9rem 1rem' }}>
               <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 800, letterSpacing: '0.04em' }}>NEWS SENTIMENT</div>
-              <div style={{ marginTop: 4, fontSize: '1.25rem', color: '#15803D', fontWeight: 800 }}>80/100</div>
+              <div style={{ marginTop: 4, fontSize: '1.25rem', color: newsSentimentScore >= 60 ? '#15803D' : '#B91C1C', fontWeight: 800 }}>{newsSentimentScore}/100</div>
             </div>
           </div>
         </div>

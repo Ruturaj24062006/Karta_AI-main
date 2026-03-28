@@ -257,6 +257,17 @@ def download_generated_report(task_id: int, db: Session = Depends(get_db)):
         analysis_pd=analysis.probability_of_default or 45.1,
         results_data=results_data,
         fraud_data=fraud_data,
+        company_meta={
+            "cin_number": company.cin_number,
+            "gstin_number": company.gstin_number,
+            "pan_number": company.pan_number,
+            "loan_amount_requested": company.loan_amount_requested,
+            "bs_file_path": company.bs_file_path,
+            "bank_file_path": company.bank_file_path,
+            "gst_file_path": company.gst_file_path,
+        },
+        recommended_loan_amount=analysis.recommended_loan_amount,
+        recommended_interest_rate=analysis.recommended_interest_rate,
     )
 
     return FileResponse(
